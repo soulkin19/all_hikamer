@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Delta Force: Tide Prison Escape</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+        #gameCanvas {
+            display: block;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px #000;
+        }
+        #mobile-warning {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+        }
+        /* ジョイスティックの見た目 */
+        #joystick-container {
+            position: absolute;
+            bottom: 50px;
+            left: 50px;
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            display: none; /* スマホのみ表示 */
+        }
+        #joystick-knob {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            top: 30px;
+            left: 30px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="mobile-warning">
+    <h1>MOBILE ONLY</h1>
+    <p>このゲームはモバイルデバイス専用です。<br>スマートフォンのブラウザで開いてください。</p>
+</div>
+
+<div id="ui-layer">
+    <div>MISSION: タイドプリズンから脱獄せよ</div>
+    <div id="status">位置: (0, 0)</div>
+    <div id="distance">脱出まで: ---m</div>
+</div>
+
+<div id="joystick-container">
+    <div id="joystick-knob"></div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+    // モバイル判定
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (!isMobile) {
+        document.getElementById('mobile-warning').style.display = 'flex';
+    } else {
+        document.getElementById('joystick-container').style.display = 'block';
+    }
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const distanceEl = document.getElementById('distance');
+
+    // ゲーム設定
+    const world = {
+        width: 5000,  // 広大なマップ
+        height: 5000,
+        gridSize: 100
+    };
+
+    const player = {
+        x: 2500,
+        y: 2500,
+        radius: 15,
+        speed: 4,
+        vx: 0,
+        vy: 0,
+        color: '#00ff00'
+    };
+
+    const exit = {
+        x: 100,
+        y: 100,
+        radius: 50
+    };
+
+    // 簡易的な障害物（壁）の生成
+    const walls = [];
+    for(let i=0; i<100; i++) {
+        walls.push({
+            x: Math.random() * world.width,
+            y: Math.random() * world.height,
+            w: 100 + Math.random() * 300,
+            h: 100 + Math.random() * 300
+        });
+    }
+
+    // カメラ
+    const camera = {
+        x: 0,
+        y: 0
+    };
+
+    // ジョイスティック制御
+    const joystick = {
+        active: false,
+        originX: 100,
+        originY: 0, // 動的に設定
+        currX: 0,
+        currY: 0,
+        maxRadius: 50
+    };
+
+    function init() {
+        resize();
+        window.addEventListener('resize', resize);
+        
+        canvas.addEventListener('touchstart', handleTouch);
+        canvas.addEventListener('touchmove', handleTouch);
+        canvas.addEventListener('touchend', () => {
+            player.vx = 0;
+            player.vy = 0;
+            document.getElementById('joystick-knob').style.transform = `translate(0px, 0px)`;
+        });
+
+        requestAnimationFrame(update);
+    }
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    function handleTouch(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        
+        // ジョイスティックの基準位置（画面左下付近）
+        const jBaseX = 100;
+        const jBaseY = window.innerHeight - 100;
+
+        let dx = touch.clientX - jBaseX;
+        let dy = touch.clientY - jBaseY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+
+        if (dist > 0) {
+            const angle = Math.atan2(dy, dx);
+            const moveDist = Math.min(dist, joystick.maxRadius);
+            
+            // ノブの表示更新
+            const knobX = Math.cos(angle) * moveDist;
+            const knobY = Math.sin(angle) * moveDist;
+            document.getElementById('joystick-knob').style.transform = `translate(${knobX}px, ${knobY}px)`;
+
+            // プレイヤーの速度設定
+            player.vx = Math.cos(angle) * player.speed * (moveDist / joystick.maxRadius);
+            player.vy = Math.sin(angle) * player.speed * (moveDist / joystick.maxRadius);
+        }
+    }
+
+    function update() {
+        // 移動
+        player.x += player.vx;
+        player.y += player.vy;
+
+        // ワールド境界制限
+        player.x = Math.max(0, Math.min(world.width, player.x));
+        player.y = Math.max(0, Math.min(world.height, player.y));
+
+        // カメラ更新（プレイヤーを中央に）
+        camera.x = player.x - canvas.width / 2;
+        camera.y = player.y - canvas.height / 2;
+
+        // UI更新
+        statusEl.innerText = `位置: (${Math.floor(player.x)}, ${Math.floor(player.y)})`;
+        const distToExit = Math.floor(Math.sqrt((player.x - exit.x)**2 + (player.y - exit.y)**2));
+        distanceEl.innerText = `脱出まで: ${distToExit}m`;
+
+        if(distToExit < exit.radius) {
+            alert("脱出成功！タイドプリズンを突破しました。");
+            player.x = 2500; player.y = 2500; // リセット
+        }
+
+        draw();
+        requestAnimationFrame(update);
+    }
+
+    function draw() {
+        ctx.fillStyle = '#111'; // 背景（地面）
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        ctx.translate(-camera.x, -camera.y);
+
+        // グリッド描画（広さを実感させるため）
+        ctx.strokeStyle = '#222';
+        for(let x=0; x<world.width; x+=world.gridSize) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, world.height); ctx.stroke();
+        }
+        for(let y=0; y<world.height; y+=world.gridSize) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(world.width, y); ctx.stroke();
+        }
+
+        // 障害物（壁）
+        ctx.fillStyle = '#333';
+        walls.forEach(w => {
+            ctx.fillRect(w.x, w.y, w.w, w.h);
+        });
+
+        // 脱出地点（ヘリポート風）
+        ctx.strokeStyle = '#ff0';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(exit.x, exit.y, exit.radius, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.fillStyle = '#ff0';
+        ctx.font = "20px Arial";
+        ctx.fillText("EXTRACTION", exit.x - 60, exit.y - 60);
+
+        // プレイヤー
+        ctx.fillStyle = player.color;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = player.color;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.restore();
+    }
+
+    init();
+</script>
+</body>
+</html>
