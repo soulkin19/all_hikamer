@@ -3,26 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tide Prison: Tactical Alpha</title>
+    <title>Tide Prison: Tactical FPS</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; touch-action: none; font-family: 'Oswald', sans-serif; }
-        #hud { position: absolute; width: 100%; height: 100%; pointer-events: none; border: 1px solid rgba(255,0,0,0.1); }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); border: 1px solid #0f0; border-radius: 50%; opacity: 0.5; }
-        #info { position: absolute; top: 30px; left: 30px; color: #eee; font-size: 12px; letter-spacing: 2px; text-shadow: 2px 2px 2px #000; }
-        #info span { color: #ffaa00; font-weight: bold; }
+        body { margin: 0; overflow: hidden; background: #eee; touch-action: none; font-family: 'Arial', sans-serif; }
+        
+        /* HUD */
+        #hud { position: absolute; width: 100%; height: 100%; pointer-events: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); border: 2px solid rgba(0,255,0,0.8); border-radius: 50%; }
+        #info { position: absolute; top: 40px; left: 40px; color: #111; background: rgba(255,255,255,0.8); padding: 10px; border-left: 5px solid #ffaa00; font-weight: bold; }
 
-        /* 左スティック */
-        #stick-base { position: absolute; bottom: 80px; left: 80px; width: 150px; height: 150px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 50%; }
-        #stick-knob { position: absolute; width: 60px; height: 60px; background: rgba(255,255,255,0.2); border-radius: 50%; top: 45px; left: 45px; }
+        /* 左ジョイスティック */
+        #joy-base { position: absolute; bottom: 80px; left: 80px; width: 160px; height: 160px; background: rgba(0,0,0,0.1); border: 2px solid rgba(0,0,0,0.2); border-radius: 50%; }
+        #joy-knob { position: absolute; width: 60px; height: 60px; background: rgba(0,0,0,0.3); border-radius: 50%; top: 50px; left: 50px; }
     </style>
 </head>
 <body>
 
 <div id="hud">
     <div id="crosshair"></div>
-    <div id="info">LOCATION: <span>TIDE PRISON - CENTRAL PIT</span><br>STATUS: INFILTRATED</div>
+    <div id="info">AREA: TIDE PRISON - HUB<br>OBJECTIVE: REACH EXTRACTION</div>
 </div>
-<div id="stick-base"><div id="stick-knob"></div></div>
+<div id="joy-base"><div id="joy-knob"></div></div>
 
 <script type="importmap">
     { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -34,17 +35,14 @@
     let scene, camera, renderer, clock;
     let yaw = 0, pitch = 0;
     let moveData = { x: 0, y: 0 };
-    let touchLookId = null;
-    let lastX, lastY;
-
-    const player = { pos: new THREE.Vector3(30, 1.7, 0), velocity: new THREE.Vector3() };
+    let lookId = null, lastX = 0, lastY = 0;
+    const player = { pos: new THREE.Vector3(0, 1.8, 20), speed: 0.2 };
 
     init();
 
     function init() {
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050608);
-        scene.fog = new THREE.Fog(0x050608, 10, 150);
+        scene.background = new THREE.Color(0xddeeff); // 明るい空・天井
 
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         clock = new THREE.Clock();
@@ -54,78 +52,65 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- ライティング ---
-        const ambient = new THREE.AmbientLight(0xffffff, 0.2);
-        scene.add(ambient);
+        // --- 強力なライティング (タイドプリズンの明るい屋内を再現) ---
+        const amb = new THREE.AmbientLight(0xffffff, 1.0); // 全体を明るく
+        scene.add(amb);
+        const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+        sun.position.set(10, 50, 10);
+        scene.add(sun);
 
-        // 中央吹き抜けを照らす不気味な青白い光
-        const centerLight = new THREE.PointLight(0x4488ff, 2000, 100);
-        centerLight.position.set(0, 20, 0);
-        scene.add(centerLight);
+        // --- マップ構築 (Tide Prison Brutalist/Industrial) ---
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.5 }); // 白いコンクリート
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.2, metalness: 0.5 }); // 金属床
+        const hazardMat = new THREE.MeshStandardMaterial({ color: 0xffcc00 }); // 黄色い警告帯
 
-        // --- マップ構築 (Tide Prison: Brutalist Style) ---
-        const concreteMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.1 });
-        const hazardMat = new THREE.MeshStandardMaterial({ color: 0x333311, roughness: 0.8 }); // 黄色帯の代わり
-
-        // 1. 中央の巨大な「穴（The Pit）」
-        // 実際にはドーナツ状の床を作る
-        const floorGeo = new THREE.RingGeometry(15, 200, 32);
-        const floor = new THREE.Mesh(floorGeo, concreteMat);
+        // 床
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), floorMat);
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
-        // 2. 中央監視塔 (中空の円柱)
-        const towerGeo = new THREE.CylinderGeometry(12, 12, 100, 16, 1, true);
-        const tower = new THREE.Mesh(towerGeo, concreteMat);
-        tower.position.y = 10;
-        scene.add(tower);
+        // 中央のハブエリア (巨大な吹き抜け空間を壁で構成)
+        const createWall = (x, y, z, w, h, d, mat = wallMat) => {
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+        };
 
-        // 3. キャットウォーク (多層構造)
-        for(let h = 5; h <= 40; h += 10) {
-            const ringGeo = new THREE.TorusGeometry(30, 1.5, 8, 32);
-            const ring = new THREE.Mesh(ringGeo, concreteMat);
-            ring.rotation.x = Math.PI / 2;
-            ring.position.y = h;
-            scene.add(ring);
-            
-            // 支柱
-            for(let i=0; i<4; i++) {
-                const angle = (i/4) * Math.PI * 2;
-                const pillar = new THREE.Mesh(new THREE.BoxGeometry(2, h, 2), concreteMat);
-                pillar.position.set(Math.cos(angle)*30, h/2, Math.sin(angle)*30);
-                scene.add(pillar);
-            }
-        }
+        // 周囲の巨大な壁
+        createWall(0, 20, -50, 100, 40, 2); // 正面
+        createWall(0, 20, 50, 100, 40, 2);  // 背後
+        createWall(-50, 20, 0, 2, 40, 100); // 左
+        createWall(50, 20, 0, 2, 40, 100);  // 右
 
-        // 4. 赤いアラートライト（各所に配置）
-        for(let i=0; i<8; i++) {
-            const angle = (i/8) * Math.PI * 2;
-            const light = new THREE.PointLight(0xff0000, 50, 20);
-            light.position.set(Math.cos(angle)*40, 3, Math.sin(angle)*40);
-            scene.add(light);
-            // 光源のメッシュ
-            const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color: 0xff0000}));
-            lamp.position.copy(light.position);
-            scene.add(lamp);
-        }
+        // 2階キャットウォーク
+        createWall(0, 10, 0, 100, 0.5, 10, floorMat);
+        createWall(0, 11, 5, 100, 2, 0.2, wallMat); // 手すり
+
+        // 黄色いハザードライン (床に配置)
+        createWall(0, 0.05, 15, 100, 0.1, 1, hazardMat);
+        createWall(0, 0.05, -15, 100, 0.1, 1, hazardMat);
+
+        // 戦術的遮蔽物 (コンテナ)
+        const crateMat = new THREE.MeshStandardMaterial({ color: 0x224466, metalness: 0.8 });
+        createWall(5, 1.5, 5, 3, 3, 6, crateMat);
+        createWall(-10, 1.5, -5, 4, 3, 4, crateMat);
 
         setupControls();
         animate();
     }
 
     function setupControls() {
-        const knob = document.getElementById('stick-knob');
-        const limit = 50;
+        const knob = document.getElementById('joy-knob');
+        const container = document.getElementById('joy-base');
 
-        // タッチ開始
         window.addEventListener('touchstart', (e) => {
             for (let t of e.changedTouches) {
                 if (t.clientX < window.innerWidth / 2) {
-                    // 左側: スティック（位置は固定）
+                    // 左手: スティック操作（位置固定）
                 } else {
-                    // 右側: 視点移動
-                    if (touchLookId === null) {
-                        touchLookId = t.identifier;
+                    // 右手: 視点移動開始
+                    if (lookId === null) {
+                        lookId = t.identifier;
                         lastX = t.clientX;
                         lastY = t.clientY;
                     }
@@ -133,32 +118,29 @@
             }
         }, { passive: false });
 
-        // タッチ移動
         window.addEventListener('touchmove', (e) => {
             e.preventDefault();
             for (let t of e.touches) {
                 if (t.clientX < window.innerWidth / 2) {
-                    // 移動スティック
-                    const rect = document.getElementById('stick-base').getBoundingClientRect();
-                    const centerX = rect.left + 75;
-                    const centerY = rect.top + 75;
+                    // スティック移動
+                    const rect = container.getBoundingClientRect();
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
                     const dx = t.clientX - centerX;
                     const dy = t.clientY - centerY;
-                    const dist = Math.min(Math.sqrt(dx*dx + dy*dy), limit);
+                    const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 50);
                     const angle = Math.atan2(dy, dx);
                     
                     knob.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
-                    
-                    // スティックの上(dy < 0)が前進
-                    moveData.x = Math.cos(angle) * (dist / limit);
-                    moveData.y = Math.sin(angle) * (dist / limit);
-                } else if (t.identifier === touchLookId) {
-                    // 視点移動
+                    moveData = { x: Math.cos(angle) * (dist / 50), y: Math.sin(angle) * (dist / 50) };
+                } 
+                else if (t.identifier === lookId) {
+                    // 右手視点移動
                     const dx = t.clientX - lastX;
                     const dy = t.clientY - lastY;
                     yaw -= dx * 0.005;
                     pitch -= dy * 0.005;
-                    pitch = Math.max(-Math.PI/2.1, Math.min(Math.PI/2.1, pitch));
+                    pitch = Math.max(-1.5, Math.min(1.5, pitch));
                     lastX = t.clientX;
                     lastY = t.clientY;
                 }
@@ -170,8 +152,8 @@
                 if (t.clientX < window.innerWidth / 2) {
                     moveData = { x: 0, y: 0 };
                     knob.style.transform = 'translate(0,0)';
-                } else if (t.identifier === touchLookId) {
-                    touchLookId = null;
+                } else if (t.identifier === lookId) {
+                    lookId = null;
                 }
             }
         });
@@ -180,34 +162,17 @@
     function animate() {
         requestAnimationFrame(animate);
 
-        // 1. カメラ回転（クォータニオン）
+        // 視点更新
         camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
 
-        // 2. 移動：カメラが向いている方向を基準にする
+        // 移動計算 (カメラのYaw回転に基づき、水平方向に移動)
         if (moveData.x !== 0 || moveData.y !== 0) {
-            // 前方ベクトル (カメラの向きから水平成分のみ抽出)
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-            forward.y = 0;
-            forward.normalize();
-
-            // 右方向ベクトル
-            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-            right.y = 0;
-            right.normalize();
-
-            // スティックの dy (moveData.y) は「前進/後退」
-            // スティックの dx (moveData.x) は「左右移動」
-            const moveSpeed = 0.25;
-            player.pos.addScaledVector(forward, -moveData.y * moveSpeed);
-            player.pos.addScaledVector(right, moveData.x * moveSpeed);
-        }
-
-        // 3. 境界チェック（穴に落ちないように、または外に出ないように）
-        const distFromCenter = Math.sqrt(player.pos.x**2 + player.pos.z**2);
-        if (distFromCenter < 16) { // 穴の縁
-            const angle = Math.atan2(player.pos.z, player.pos.x);
-            player.pos.x = Math.cos(angle) * 16.1;
-            player.pos.z = Math.sin(angle) * 16.1;
+            const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+            const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+            
+            // moveData.yはスティックの上下、moveData.xは左右
+            player.pos.addScaledVector(forward, -moveData.y * player.speed);
+            player.pos.addScaledVector(right, moveData.x * player.speed);
         }
 
         camera.position.copy(player.pos);
