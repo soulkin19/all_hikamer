@@ -2,30 +2,30 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>OUTBREAK - 宇宙基地最終脱出プロトコル</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OUTBREAK - 宇宙基地最終脱出 (3D Ver.)</title>
 <style>
   body {
     margin: 0;
     padding: 0;
     height: 100vh;
-    background: #0a0e17;
+    overflow: hidden;
+    background: #000814;
     color: #e0f7ff;
     font-family: "Courier New", Consolas, monospace;
-    overflow: hidden;
-    image-rendering: pixelated;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   #game-container {
     position: relative;
     width: 100%;
-    height: 100%;
+    height: 100vh;
   }
 
-  #scene {
+  #renderer {
     position: absolute;
     inset: 0;
-    background: linear-gradient(to bottom, #0b1e3f 0%, #000814 100%);
-    transition: background 1.5s;
   }
 
   #overlay {
@@ -37,8 +37,8 @@
   }
 
   @keyframes alarm {
-    0% { opacity: 0.1; }
-    100% { opacity: 0.4; }
+    0%,100% { opacity: 0.12; }
+    50%     { opacity: 0.45; }
   }
 
   #ui {
@@ -50,73 +50,40 @@
   #top-bar {
     position: absolute;
     top: 0;
-    left: 0;
-    right: 0;
-    height: 48px;
-    background: rgba(0,0,0,0.7);
-    backdrop-filter: blur(4px);
+    left: 0; right: 0;
+    height: 44px;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(6px);
     border-bottom: 1px solid #00d4ff44;
     display: flex;
     align-items: center;
-    padding: 0 16px;
-    font-size: 1.1rem;
+    justify-content: space-between;
+    padding: 0 12px;
+    font-size: 1rem;
     z-index: 100;
   }
 
-  #inventory {
+  #room-title {
     position: absolute;
-    bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 12px;
-    background: rgba(0,0,0,0.65);
-    padding: 12px 20px;
-    border-radius: 12px;
-    border: 1px solid #1e90ff44;
-    box-shadow: 0 0 20px #0ff3;
-    z-index: 90;
-    pointer-events: auto;
-  }
-
-  .slot {
-    width: 64px;
-    height: 64px;
-    background: #0a1f3f;
-    border: 2px solid #4488ff;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2.4rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-  }
-
-  .slot:hover {
-    border-color: #00ffff;
-    box-shadow: 0 0 15px #00ffff88;
-    transform: scale(1.08);
-  }
-
-  .slot.used {
-    opacity: 0.5;
-    border-color: #444;
+    top: 50px;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 1.8rem;
+    text-shadow: 0 0 16px #00aaff;
+    z-index: 60;
+    pointer-events: none;
   }
 
   #message {
     position: absolute;
-    top: 60px;
-    left: 50%;
-    transform: translateX(-50%);
-    max-width: 760px;
-    padding: 16px 32px;
-    background: rgba(0,20,40,0.92);
+    top: 100px;
+    left: 4%; right: 4%;
+    padding: 16px;
+    background: rgba(0,20,40,0.9);
     border: 1px solid #00aaff88;
     border-radius: 12px;
-    font-size: 1.3rem;
-    line-height: 1.6;
+    font-size: 1.15rem;
+    line-height: 1.5;
     text-align: center;
     opacity: 0;
     transition: opacity 0.6s;
@@ -126,73 +93,78 @@
 
   #choices {
     position: absolute;
-    bottom: 140px;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 160px;
+    left: 4%; right: 4%;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    width: 420px;
-    pointer-events: auto;
+    gap: 14px;
     z-index: 70;
+    pointer-events: auto;
   }
 
   .btn {
-    padding: 14px 32px;
-    font-size: 1.2rem;
+    padding: 18px;
+    font-size: 1.3rem;
     background: linear-gradient(145deg, #0a4488, #002b5c);
     border: 2px solid #1e90ff;
-    border-radius: 10px;
-    color: #e0f7ff;
+    border-radius: 12px;
+    color: white;
+    text-align: center;
     cursor: pointer;
-    transition: all 0.25s;
+    transition: all 0.2s;
+    touch-action: manipulation;
   }
 
-  .btn:hover {
+  .btn:active {
     background: linear-gradient(145deg, #1e90ff, #00d4ff);
-    color: #000814;
-    box-shadow: 0 0 25px #00d4ffaa;
-    transform: translateY(-2px);
+    transform: scale(1.04);
+    box-shadow: 0 0 30px #00ffffaa;
   }
 
-  #room-title {
+  #inventory {
     position: absolute;
-    top: 60px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 2.2rem;
-    text-shadow: 0 0 20px #00aaff;
-    letter-spacing: 2px;
-    z-index: 60;
-    pointer-events: none;
+    bottom: 20px;
+    left: 0; right: 0;
+    height: 90px;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    padding: 0 10px;
+    overflow-x: auto;
+    z-index: 90;
+    pointer-events: auto;
   }
 
-  .object {
-    position: absolute;
-    cursor: pointer;
-    transition: transform 0.2s;
-    filter: drop-shadow(0 0 8px #00ffff66);
+  .slot {
+    flex: 0 0 80px;
+    height: 80px;
+    background: #0a1f3f;
+    border: 3px solid #4488ff;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.8rem;
+    transition: all 0.2s;
   }
 
-  .object:hover {
-    transform: scale(1.12);
-  }
-
-  .pixel-art {
-    image-rendering: pixelated;
+  .slot:active {
+    border-color: #00ffff;
+    box-shadow: 0 0 20px #00ffff;
+    transform: scale(1.1);
   }
 </style>
 </head>
 <body>
 
 <div id="game-container">
-  <div id="scene"></div>
+  <canvas id="renderer"></canvas>
   <div id="overlay"></div>
   
   <div id="ui">
     <div id="top-bar">
-      <div style="flex:1">EMERGENCY ESCAPE PROTOCOL - 残存酸素： <span id="oxygen">68</span>%</div>
-      <div>時刻： T- <span id="timer">19:42</span></div>
+      <div>酸素残量: <span id="oxygen">68</span>%</div>
+      <div>T- <span id="timer">19:42</span></div>
     </div>
 
     <div id="room-title">DOCKING BAY - αセクター</div>
@@ -205,13 +177,14 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 // ────────────────────────────────────────────────
-//  ゲームデータ
+//  ゲームデータ（前回とほぼ同じ）
 // ────────────────────────────────────────────────
 const gameState = {
   oxygen: 68,
-  timeLeft: 19*60 + 42,   // 19分42秒
+  timeLeft: 19*60 + 42,
   location: "dock",
   flags: {
     powerRestored: false,
@@ -232,55 +205,109 @@ const gameState = {
 const locations = {
   dock: {
     title: "DOCKING BAY - αセクター",
-    bg: "linear-gradient(to bottom, #0b1e3f, #000814)",
+    bgColor: 0x0b1e3f,
     objects: [
-      { name: "壊れたシャトル", x: 15, y: 45, emoji: "🛰️💥", action: () => showMsg("外部接続が完全に破壊されている…") },
-      { name: "非常用ロッカー", x: 38, y: 55, emoji: "🔒", action: lockerAction },
-      { name: "制御パネル", x: 68, y: 38, emoji: "🖥️", action: controlPanelAction },
-      { name: "通路 → 研究室", x: 88, y: 50, emoji: "🚪", action: () => moveTo("lab") }
+      { name: "壊れたシャトル", pos: [-4, 0, -6], scale: [2,2,2], color: 0x999999, shape: "box", action: () => showMsg("外部接続が完全に破壊されている…") },
+      { name: "非常用ロッカー", pos: [0, 0, -5], scale: [1,2,0.5], color: 0x444444, shape: "box", action: lockerAction },
+      { name: "制御パネル", pos: [4, 0, -6], scale: [1.5,1,0.2], color: 0x00ff00, shape: "box", action: controlPanelAction },
+      { name: "通路 → 研究室", pos: [6, 0, 0], scale: [0.5,3,2], color: 0xaaaaaa, shape: "box", action: () => moveTo("lab") }
     ]
   },
   lab: {
     title: "RESEARCH LAB - 生物・AI研究区画",
-    bg: "linear-gradient(to bottom, #2a0a3f, #110014)",
+    bgColor: 0x2a0a3f,
     objects: [
-      { name: "死体", x: 20, y: 60, emoji: "💀", action: corpseAction },
-      { name: "研究端末", x: 45, y: 35, emoji: "💻", action: terminalAction },
-      { name: "冷凍保管庫", x: 75, y: 50, emoji: "🧊", action: freezerAction },
-      { name: "通路 → 発電所", x: 5, y: 50, emoji: "🚪", action: () => moveTo("power") },
-      { name: "通路 → ドック", x: 88, y: 50, emoji: "🚪", action: () => moveTo("dock") }
+      { name: "死体", pos: [-5, -1.5, -4], scale: [1,0.2,2], color: 0xff0000, shape: "box", action: corpseAction },
+      { name: "研究端末", pos: [0, 0, -5], scale: [1,1,0.5], color: 0x00ffff, shape: "box", action: terminalAction },
+      { name: "冷凍保管庫", pos: [4, 0, -6], scale: [1.5,2,1], color: 0x0000ff, shape: "box", action: freezerAction },
+      { name: "通路 → 発電所", pos: [-6, 0, 0], scale: [0.5,3,2], color: 0xaaaaaa, shape: "box", action: () => moveTo("power") },
+      { name: "通路 → ドック", pos: [6, 0, 0], scale: [0.5,3,2], color: 0xaaaaaa, shape: "box", action: () => moveTo("dock") }
     ]
   },
   power: {
     title: "REACTOR CONTROL - メイン発電所",
-    bg: "linear-gradient(to bottom, #3f1a0a, #140a00)",
+    bgColor: 0x3f1a0a,
     objects: [
-      { name: "非常用プラズマカッター", x: 25, y: 55, emoji: "🔧⚡", action: () => getItem("plasmaCutter", "🔧⚡", "プラズマカッター") },
-      { name: "メインコンソール", x: 60, y: 40, emoji: "🖥️🔴", action: reactorConsoleAction },
-      { name: "通路 → 研究室", x: 88, y: 50, emoji: "🚪", action: () => moveTo("lab") }
+      { name: "非常用プラズマカッター", pos: [-4, 0, -5], scale: [0.5,0.5,0.5], color: 0xffff00, shape: "sphere", action: () => getItem("plasmaCutter", "🔧⚡", "プラズマカッター") },
+      { name: "メインコンソール", pos: [0, 0, -6], scale: [2,1,0.5], color: 0xff0000, shape: "box", action: reactorConsoleAction },
+      { name: "通路 → 研究室", pos: [6, 0, 0], scale: [0.5,3,2], color: 0xaaaaaa, shape: "box", action: () => moveTo("lab") }
     ]
   },
   escape: {
     title: "ESCAPE POD BAY - 最終脱出ポッド",
-    bg: "linear-gradient(to bottom, #004d40, #001a14)",
+    bgColor: 0x004d40,
     objects: [
-      { name: "脱出ポッド", x: 50, y: 35, emoji: "🚀", action: launchEscapePod }
+      { name: "脱出ポッド", pos: [0, 0, -8], scale: [3,4,3], color: 0x00ff00, shape: "cylinder", action: launchEscapePod }
     ]
   }
 };
+
+// ────────────────────────────────────────────────
+//  Three.js セットアップ
+// ────────────────────────────────────────────────
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('renderer') });
+renderer.setSize(window.innerWidth, window.innerHeight);
+
+const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+scene.add(ambientLight);
+
+const pointLight = new THREE.PointLight(0xffffff, 1.2, 50);
+pointLight.position.set(0, 5, 0);
+scene.add(pointLight);
+
+camera.position.set(0, 2, 10);
+camera.lookAt(0, 0, 0);
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let INTERSECTED = null;
+let objectMeshes = [];
+
+// 床
+const floorGeometry = new THREE.PlaneGeometry(20, 20);
+const floorMaterial = new THREE.MeshBasicMaterial({ color: 0x222222, side: THREE.DoubleSide });
+const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+
+// 壁（シンプルな部屋）
+const wallMaterial = new THREE.MeshBasicMaterial({ color: 0x111111 });
+for (let i = 0; i < 4; i++) {
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(20, 5, 0.2), wallMaterial);
+  wall.position.y = 2.5;
+  if (i === 0) { wall.position.z = -10; }
+  if (i === 1) { wall.position.z = 10; wall.rotation.y = Math.PI; }
+  if (i === 2) { wall.position.x = -10; wall.rotation.y = Math.PI / 2; }
+  if (i === 3) { wall.position.x = 10; wall.rotation.y = -Math.PI / 2; }
+  scene.add(wall);
+}
+
+// アニメーションループ
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+animate();
+
+// リサイズ対応
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 
 // ────────────────────────────────────────────────
 //  基本関数
 // ────────────────────────────────────────────────
 function $(id) { return document.getElementById(id); }
 
-function showMsg(text, duration = 5000) {
+function showMsg(text, duration = 6000) {
   const el = $("message");
   el.textContent = text;
   el.style.opacity = 1;
-  if (duration > 0) {
-    setTimeout(() => el.style.opacity = 0, duration);
-  }
+  if (duration > 0) setTimeout(() => el.style.opacity = 0, duration);
 }
 
 function moveTo(loc) {
@@ -289,7 +316,7 @@ function moveTo(loc) {
 
   const room = locations[loc];
   $("room-title").textContent = room.title;
-  $("scene").style.background = room.bg;
+  scene.background = new THREE.Color(room.bgColor);
 
   updateSceneObjects();
   updateChoices([]);
@@ -297,31 +324,97 @@ function moveTo(loc) {
 }
 
 function updateSceneObjects() {
-  const container = $("scene");
-  container.innerHTML = "";
+  // 既存オブジェクト削除
+  objectMeshes.forEach(mesh => scene.remove(mesh));
+  objectMeshes = [];
 
   const room = locations[gameState.location];
   room.objects.forEach(obj => {
     if (shouldShowObject(obj)) {
-      const div = document.createElement("div");
-      div.className = "object pixel-art";
-      div.style.left = obj.x + "%";
-      div.style.top = obj.y + "%";
-      div.innerHTML = `<span style="font-size:3.8rem">${obj.emoji}</span>`;
-      div.onclick = () => obj.action();
-      container.appendChild(div);
+      let geometry;
+      if (obj.shape === "box") geometry = new THREE.BoxGeometry(...obj.scale);
+      else if (obj.shape === "sphere") geometry = new THREE.SphereGeometry(obj.scale[0]);
+      else if (obj.shape === "cylinder") geometry = new THREE.CylinderGeometry(obj.scale[0], obj.scale[0], obj.scale[1]);
+      else geometry = new THREE.BoxGeometry(...obj.scale);
+
+      const material = new THREE.MeshBasicMaterial({ color: obj.color });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(...obj.pos);
+      mesh.userData = { action: obj.action, name: obj.name };
+      scene.add(mesh);
+      objectMeshes.push(mesh);
     }
   });
 }
 
 function shouldShowObject(obj) {
-  // 条件付き表示の例
-  if (gameState.location === "dock" && obj.name === "非常用ロッカー" && gameState.flags.openedLocker) {
-    return false;
-  }
+  if (gameState.location === "dock" && obj.name === "非常用ロッカー" && gameState.flags.openedLocker) return false;
   return true;
 }
 
+// クリック/タッチ検知
+function onPointerDown(event) {
+  event.preventDefault();
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX || event.touches[0].clientX) - rect.left) / rect.width * 2 - 1;
+  mouse.y = -((event.clientY || event.touches[0].clientY) - rect.top) / rect.height * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(objectMeshes);
+
+  if (intersects.length > 0) {
+    const obj = intersects[0].object.userData;
+    obj.action();
+  }
+}
+
+renderer.domElement.addEventListener('touchstart', onPointerDown, { passive: false });
+renderer.domElement.addEventListener('click', onPointerDown);
+
+// カメラコントロール（簡易ドラッグ）
+let isDragging = false;
+let prevMouseX = 0, prevMouseY = 0;
+
+renderer.domElement.addEventListener('touchstart', e => { 
+  isDragging = true; 
+  prevMouseX = e.touches[0].clientX; 
+  prevMouseY = e.touches[0].clientY; 
+}, { passive: false });
+
+renderer.domElement.addEventListener('touchmove', e => {
+  if (!isDragging) return;
+  const deltaX = e.touches[0].clientX - prevMouseX;
+  const deltaY = e.touches[0].clientY - prevMouseY;
+  camera.rotation.y -= deltaX * 0.005;
+  camera.rotation.x -= deltaY * 0.005;
+  camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, camera.rotation.x));
+  prevMouseX = e.touches[0].clientX;
+  prevMouseY = e.touches[0].clientY;
+}, { passive: false });
+
+renderer.domElement.addEventListener('touchend', () => isDragging = false);
+
+// マウス対応（PCテスト用）
+renderer.domElement.addEventListener('mousedown', e => { 
+  isDragging = true; 
+  prevMouseX = e.clientX; 
+  prevMouseY = e.clientY; 
+});
+renderer.domElement.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const deltaX = e.clientX - prevMouseX;
+  const deltaY = e.clientY - prevMouseY;
+  camera.rotation.y -= deltaX * 0.005;
+  camera.rotation.x -= deltaY * 0.005;
+  camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, camera.rotation.x));
+  prevMouseX = e.clientX;
+  prevMouseY = e.clientY;
+});
+renderer.domElement.addEventListener('mouseup', () => isDragging = false);
+
+// ────────────────────────────────────────────────
+//  アイテム・アクション関数（前回と同様）
+// ────────────────────────────────────────────────
 function getItem(id, emoji, name) {
   if (gameState.inventory.includes(id)) return;
   gameState.inventory.push(id);
@@ -330,197 +423,191 @@ function getItem(id, emoji, name) {
   slot.className = "slot";
   slot.innerHTML = emoji;
   slot.title = name;
-  slot.onclick = () => useItem(id);
+  addTouchClick(slot, () => useItem(id));
   $("inventory").appendChild(slot);
 
   showMsg(`【入手】 ${name}`);
 }
 
-// 使用するアイテム（クリックで使う）
+function addTouchClick(element, callback) {
+  let touched = false;
+  element.addEventListener("touchstart", e => {
+    e.preventDefault();
+    touched = true;
+  }, { passive: false });
+
+  element.addEventListener("touchend", e => {
+    e.preventDefault();
+    if (touched) {
+      callback();
+      touched = false;
+    }
+  }, { passive: false });
+
+  element.addEventListener("click", callback);
+}
+
 function useItem(id) {
   if (gameState.location === "lab" && id === "plasmaCutter" && !gameState.flags.hasCodeFromLab) {
     showMsg("冷凍保管庫の強化ガラスを切断…中からデータチップを回収した！");
     gameState.flags.hasCodeFromLab = true;
     getItem("dataChip", "💾", "暗号化データチップ");
-  }
-  else if (gameState.location === "dock" && id === "blueKeycard") {
+  } else if (gameState.location === "dock" && id === "blueKeycard") {
     showMsg("青いキーカードで制御パネルのレベル1ロックを解除した");
-    gameState.flags.hasBlueKeycard = true; // フラグ更新
+    gameState.flags.hasBlueKeycard = true;
   }
-  // 他のアイテム使用ケース…
+  // 他のケース追加可能
 }
 
-// ────────────────────────────────────────────────
-//  各オブジェクトのアクション
-// ────────────────────────────────────────────────
 function lockerAction() {
-  if (gameState.flags.openedLocker) return;
+  if (gameState.flags.openedLocker) return showMsg("すでに開いている");
 
-  if (gameState.flags.hasBlueKeycard) {
-    showMsg("青いキーカードでロッカーを開けた！");
+  if (gameState.flags.hasPlasmaCutter) { // 例: プラズマカッターで強引に開ける分岐追加
+    showMsg("プラズマカッターでロッカーを切断！中からキーカードを入手");
     gameState.flags.openedLocker = true;
     getItem("blueKeycard", "💳青", "青色アクセスカード");
-    getItem("redKeycard", "💳赤", "赤色アクセスカード（高度な権限）");
+    getItem("redKeycard", "💳赤", "赤色アクセスカード");
   } else {
-    showMsg("ロックされている…レベル2認証が必要だ");
+    showMsg("ロックされている…認証が必要だ");
   }
 }
 
 function controlPanelAction() {
-  if (!gameState.flags.powerRestored) {
-    showMsg("電力が復旧していない…コンソールが完全にダウンしている");
-    return;
-  }
+  if (!gameState.flags.powerRestored) return showMsg("電力が復旧していない");
 
-  if (!gameState.flags.hasRedKeycard) {
-    showMsg("高度な権限（赤カード）が必要だ");
-    return;
-  }
+  if (!gameState.flags.hasRedKeycard) return showMsg("赤カードが必要");
 
-  showMsg("メインコンソールにアクセス…脱出ポッド起動シーケンスを入力可能になりました");
+  showMsg("脱出ポッド起動シーケンス入力可能");
   updateChoices([
-    "脱出ポッド起動シーケンスを開始する →",
-    "（キャンセル）"
+    "起動する",
+    "キャンセル"
   ], [
     () => moveTo("escape"),
-    () => showMsg("まだ準備が…")
+    () => {}
   ]);
 }
 
 function corpseAction() {
   if (gameState.flags.sawCorpse) return;
   gameState.flags.sawCorpse = true;
-
-  showMsg("…同僚の遺体だ。胸に深い爪痕。感染か…？\n近くにメモが落ちている…\n『AIコアが暴走。パスコードは生体認証+1973』");
+  showMsg("同僚の遺体…メモ:『AI暴走。パス1973』");
   gameState.flags.knowsAboutAI = true;
 }
 
 function terminalAction() {
-  if (gameState.flags.computerHacked) {
-    showMsg("すでにハッキング済み…これ以上の情報はない");
-    return;
-  }
+  if (gameState.flags.computerHacked) return showMsg("ハック済み");
 
-  showMsg("パスワードを要求されている…");
   updateChoices([
-    "1973 を入力する（メモから）",
-    "適当に入力する",
+    "1973入力",
+    "ランダム入力",
     "諦める"
   ], [
     () => {
-      showMsg("…認証成功！システムにバックドアを仕込んだ。電力復旧可能に。");
+      showMsg("成功！電力復旧");
       gameState.flags.computerHacked = true;
       gameState.flags.powerRestored = true;
-      showMsg("※メイン発電所の非常電源がオンラインになりました", 8000);
     },
-    () => showMsg("…アクセス拒否。警報が鳴り始めた！酸素が-5%"),
-    () => showMsg("やめておこう…")
+    () => {
+      showMsg("失敗！酸素-5%");
+      gameState.oxygen -= 5;
+    },
+    () => {}
   ]);
 }
 
 function freezerAction() {
-  if (!gameState.flags.hasPlasmaCutter) {
-    showMsg("強化ガラスで封鎖されている…普通の工具では無理だ");
-    return;
-  }
-  // プラズマカッター使用は inventory クリックで処理
-  showMsg("冷凍保管庫の中を覗く…何かありそうだ");
+  if (!gameState.flags.hasPlasmaCutter) return showMsg("ガラスが厚い…カッターが必要");
+  showMsg("中を覗く…データチップありそう");
+  // 使用はインベントリから
 }
 
 function reactorConsoleAction() {
-  if (!gameState.flags.powerRestored) {
-    showMsg("コンソール自体がダウンしている…");
-    return;
-  }
+  if (!gameState.flags.powerRestored) return showMsg("ダウン中");
 
-  if (gameState.flags.reactorCritical) {
-    showMsg("すでに暴走カウントダウンが始まっている…急がないと！");
-    return;
-  }
+  if (gameState.flags.reactorCritical) return showMsg("暴走中！");
 
-  showMsg("リアクター制御画面\n臨界事故回避コードを入力？");
   updateChoices([
-    "回避コードを入力する（研究室のデータチップが必要）",
-    "意図的に暴走させる（？）",
+    "回避コード入力",
+    "暴走させる",
     "何もしない"
   ], [
     () => {
       if (gameState.flags.hasCodeFromLab) {
-        showMsg("臨界回避コード入力成功！リアクター安定化…これで脱出ポッドに電力供給可能！");
+        showMsg("安定化成功！脱出可能");
         gameState.flags.reactorCritical = false;
       } else {
-        showMsg("適切なコードがない…失敗。リアクターが臨界状態に突入した！");
+        showMsg("失敗…暴走開始。酸素-15%");
         gameState.flags.reactorCritical = true;
         gameState.oxygen -= 15;
       }
     },
     () => {
-      showMsg("…故意に制御を外した。リアクターが暴走開始。残り時間大幅短縮！");
+      showMsg("暴走開始！時間短縮");
       gameState.flags.reactorCritical = true;
       gameState.timeLeft = Math.min(gameState.timeLeft, 5*60);
     },
-    () => showMsg("まだ早い…")
+    () => {}
   ]);
 }
 
 function launchEscapePod() {
   let ending = "bad";
-
   if (gameState.flags.powerRestored && !gameState.flags.reactorCritical) {
-    if (gameState.oxygen > 25) {
-      ending = "true";
-    } else {
-      ending = "oxygen";
-    }
+    ending = gameState.oxygen > 25 ? "true" : "oxygen";
   }
 
+  const endings = {
+    true: { color: '#0f8', msg: '生存脱出成功（真エンド）' },
+    oxygen: { color: '#f80', msg: '酸素切れ寸前（酸欠エンド）' },
+    bad: { color: '#f44', msg: '失敗…基地消滅（バッドエンド）' }
+  };
+  const { color, msg } = endings[ending];
+
   document.body.innerHTML = `
-    <div style="position:absolute;inset:0;background:#000;color:#0f0;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:2.4rem;">
-      <div style="margin-bottom:60px;">ESCAPE SEQUENCE INITIATED</div>
-      ${ending === "true" ? `
-        <div style="color:#0f8;font-size:3.2rem;margin:40px 0;">生存脱出成功 - あなたは生き延びた</div>
-        <div style="font-size:1.4rem;opacity:0.7;">（真エンド）</div>
-      ` : ending === "oxygen" ? `
-        <div style="color:#f80;font-size:2.8rem;margin:40px 0;">酸素切れ寸前での緊急脱出…生還は極めて困難</div>
-        <div style="font-size:1.4rem;opacity:0.7;">（酸欠エンド）</div>
-      ` : `
-        <div style="color:#f44;font-size:2.8rem;margin:40px 0;">脱出ポッド起動失敗…基地と共に消滅</div>
-        <div style="font-size:1.4rem;opacity:0.7;">（バッドエンド）</div>
-      `}
-      <div style="margin-top:120px;font-size:1.3rem;opacity:0.6;">リロードで最初からやり直せます</div>
+    <div style="position:absolute;inset:0;background:#000;color:${color};display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:2.4rem;">
+      <div style="margin-bottom:60px;">ESCAPE INITIATED</div>
+      <div style="font-size:3.2rem;margin:40px 0;">${msg}</div>
+      <div style="margin-top:120px;font-size:1.3rem;opacity:0.6;">リロードでリスタート</div>
     </div>
   `;
 }
 
+function updateChoices(texts, actions) {
+  const choicesEl = $("choices");
+  choicesEl.innerHTML = "";
+  texts.forEach((text, i) => {
+    const btn = document.createElement("div");
+    btn.className = "btn";
+    btn.textContent = text;
+    addTouchClick(btn, actions[i]);
+    choicesEl.appendChild(btn);
+  });
+}
+
 // ────────────────────────────────────────────────
-//  時間・酸素減少システム
+//  時間・酸素システム
 // ────────────────────────────────────────────────
 setInterval(() => {
   gameState.timeLeft--;
-  gameState.oxygen -= (gameState.flags.reactorCritical ? 0.35 : 0.08);
-
-  if (gameState.oxygen <= 0) {
-    gameState.oxygen = 0;
-    showMsg("酸素が尽きた……意識が……", 999999);
-    setTimeout(() => {
-      document.body.innerHTML = `<div style="position:absolute;inset:0;background:#000;color:#400;display:flex;align-items:center;justify-content:center;font-size:4rem;">GAME OVER - ASPHYXIA</div>`;
-    }, 4000);
-  }
+  gameState.oxygen -= gameState.flags.reactorCritical ? 0.4 : 0.09;
+  gameState.oxygen = Math.max(0, gameState.oxygen);
 
   const min = Math.floor(gameState.timeLeft / 60);
-  const sec = String(gameState.timeLeft % 60).padStart(2,"0");
+  const sec = String(gameState.timeLeft % 60).padStart(2, "0");
   $("timer").textContent = `${min}:${sec}`;
-  $("oxygen").textContent = Math.max(0, Math.floor(gameState.oxygen));
+  $("oxygen").textContent = Math.floor(gameState.oxygen);
 
+  if (gameState.oxygen <= 0) {
+    document.body.innerHTML = '<div style="position:fixed;inset:0;background:#000;color:#f44;display:grid;place-items:center;font-size:3rem;">酸素切れ GAME OVER</div>';
+  }
   if (gameState.timeLeft <= 0) {
-    document.body.innerHTML = `<div style="position:absolute;inset:0;background:#000;color:#f44;display:flex;align-items:center;justify-content:center;font-size:4rem;">GAME OVER - TIME OUT</div>`;
+    document.body.innerHTML = '<div style="position:fixed;inset:0;background:#000;color:#f80;display:grid;place-items:center;font-size:3rem;">タイムアウト GAME OVER</div>';
   }
 }, 1000);
 
-// 初回表示
+// 初回
 moveTo("dock");
-showMsg("■ 宇宙基地「オルフェウス」最深部\n■ 感染拡大により全システム崩壊中\n■ 残存酸素 68% ／ 脱出ポッドまでの推定所要時間 約20分\n\n…生きて帰れるか？", 12000);
-
+showMsg("宇宙基地崩壊中…酸素68% 脱出まで生き延びろ", 10000);
 </script>
 </body>
 </html>
