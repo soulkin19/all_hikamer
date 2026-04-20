@@ -56,6 +56,14 @@
         let currentWeapon = WEAPONS.XM7;
         let ammo = currentWeapon.maxAmmo, isReloading = false, isAds = false;
         let score = 0, wave = 1, playerHealth = 100, lastFireTime = 0, targetRecoilX = 0;
+        
+        // 敵出現率アップ用
+        let lastSpawnTime = Date.now();
+        
+        // iPadキーボード環境向けタッチ射撃修正用
+        let touchStartTime = 0;
+        let touchStartX = 0;
+        let touchStartY = 0;
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
@@ -215,10 +223,16 @@
             }
         });
 
-        // タッチ視点移動
+        // タッチ視点移動 + タップ射撃（iPadキーボード環境修正）
+        // 右側をドラッグしても射撃されず、素早いタップのみ射撃するように変更
         window.addEventListener('touchstart', (e) => {
-            lastTouchX = e.touches[0].clientX; lastTouchY = e.touches[0].clientY;
-            if(!document.pointerLockElement) fire(); // タップで射撃
+            const touch = e.touches[0];
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            touchStartTime = Date.now();
+            // ここでは射撃せず、touchendでタップ判定を行う
         }, {passive: false});
 
         window.addEventListener('touchmove', (e) => {
@@ -229,6 +243,21 @@
             camera.rotation.x = Math.max(-1.4, Math.min(1.4, camera.rotation.x));
             lastTouchX = t.clientX; lastTouchY = t.clientY;
             e.preventDefault();
+        }, {passive: false});
+
+        // タップ判定（短時間・小移動のみ射撃）→ これで右側タッチ時の無条件射撃を完全修正
+        window.addEventListener('touchend', (e) => {
+            if (e.changedTouches.length === 0) return;
+            const touch = e.changedTouches[0];
+            const dx = touch.clientX - touchStartX;
+            const dy = touch.clientY - touchStartY;
+            const dist = Math.hypot(dx, dy);
+            const duration = Date.now() - touchStartTime;
+            
+            // 素早いタップ（移動20px以内、300ms以内）のみ射撃
+            if (dist < 20 && duration < 300 && playerHealth > 0) {
+                fire();
+            }
         }, {passive: false});
 
         document.getElementById('click-to-start').addEventListener('click', function() { 
@@ -281,10 +310,26 @@
                 e.lookAt(camera.position.x, 1, camera.position.z);
             });
 
-            if(enemies.length === 0) { wave++; for(let i=0; i<2+wave; i++) spawnEnemy(); }
+            // 波クリア判定（そのまま）
+            if(enemies.length === 0) { 
+                wave++; 
+                for(let i=0; i<2+wave; i++) spawnEnemy(); 
+            }
+
+            // ★ 敵の出現率を大幅アップ ★
+            // 波進行中も定期的に敵を追加スポーン（波数が高いほど出現間隔が短くなる）
+            const spawnInterval = Math.max(1000, 4200 - wave * 350); // wave1≈3850ms → wave5≈2550ms → wave10≈700ms
+            if (now - lastSpawnTime > spawnInterval) {
+                spawnEnemy();
+                lastSpawnTime = now;
+            }
+
             renderer.render(scene, camera);
         }
-        spawnEnemy(); updateUI(); animate();
+        spawnEnemy(); 
+        lastSpawnTime = Date.now(); // 初期スポーン後にタイマー開始
+        updateUI(); 
+        animate();
     </script>
 </body>
 </html>
