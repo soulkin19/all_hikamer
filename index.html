@@ -3,46 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D PvE - Day & Mobile</title>
+    <title>3D PvE - Tactical Controls</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; background: #87ceeb; }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; touch-action: none; background: #87ceeb; }
         canvas { display: block; }
 
-        /* UI全体 */
-        #ui { position: absolute; top: 10px; left: 10px; color: #333; pointer-events: none; background: rgba(255,255,255,0.7); padding: 10px; border-radius: 8px; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 15px; height: 15px; border: 2px solid rgba(0,0,0,0.5); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-        #ammo-display { position: absolute; bottom: 100px; right: 20px; color: white; text-align: right; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; pointer-events: none; }
+        /* UIパネル */
+        #ui { position: absolute; top: 15px; left: 15px; color: #222; pointer-events: none; background: rgba(255,255,255,0.8); padding: 12px; border-radius: 10px; border: 2px solid #555; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 12px; height: 12px; border: 2px solid rgba(0,0,0,0.6); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+        #ammo-display { position: absolute; bottom: 100px; right: 20px; color: white; text-align: right; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 10px; pointer-events: none; min-width: 120px; }
         
-        /* メッセージ */
-        #reload-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ffcc00; font-size: 24px; font-weight: bold; display: none; text-shadow: 2px 2px 0 #000; }
-        #wave-notify { position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%); color: #d32f2f; font-size: 40px; font-weight: bold; display: none; text-shadow: 2px 2px 0 #fff; }
+        /* 状態表示 */
+        #reload-msg { position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%); color: #ffeb3b; font-size: 24px; font-weight: bold; display: none; text-shadow: 2px 2px 4px #000; }
+        #wave-notify { position: absolute; top: 25%; left: 50%; transform: translate(-50%, -50%); color: #f44336; font-size: 48px; font-weight: bold; display: none; text-shadow: 2px 2px 0 #fff; }
 
-        /* --- モバイル用コントロール --- */
-        .mobile-btn { position: absolute; width: 70px; height: 70px; background: rgba(255,255,255,0.3); border: 2px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; user-select: none; }
-        #fire-btn { bottom: 100px; right: 110px; width: 90px; height: 90px; background: rgba(255,0,0,0.4); }
-        #ads-btn { bottom: 210px; right: 30px; }
-        #reload-btn { bottom: 110px; right: 20px; }
-        #switch-btn { bottom: 20px; right: 20px; width: 120px; border-radius: 10px; height: 50px; }
-        
-        /* ジョイスティック */
-        #joystick-zone { position: absolute; bottom: 40px; left: 40px; width: 120px; height: 120px; background: rgba(255,255,255,0.2); border-radius: 50%; }
-        #joystick-stick { position: absolute; top: 35px; left: 35px; width: 50px; height: 50px; background: white; border-radius: 50%; opacity: 0.6; }
+        /* モバイル用コントロール */
+        .mobile-btn { position: absolute; width: 75px; height: 75px; background: rgba(255,255,255,0.3); border: 2px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; user-select: none; }
+        #fire-btn { bottom: 110px; right: 120px; width: 100px; height: 100px; background: rgba(255,0,0,0.4); }
+        #ads-btn { bottom: 230px; right: 30px; }
+        #reload-btn { bottom: 120px; right: 20px; }
+        #switch-btn { bottom: 30px; right: 20px; width: 130px; border-radius: 12px; height: 55px; }
+        #joystick-zone { position: absolute; bottom: 50px; left: 50px; width: 130px; height: 130px; background: rgba(255,255,255,0.2); border-radius: 50%; }
+        #joystick-stick { position: absolute; top: 40px; left: 40px; width: 50px; height: 50px; background: white; border-radius: 50%; opacity: 0.7; }
 
         @media (min-width: 1024px) { .mobile-btn, #joystick-zone { display: none; } }
     </style>
 </head>
 <body>
     <div id="ui">
-        <div>SCORE: <span id="score">0</span></div>
-        <div>WAVE: <span id="wave">1</span></div>
-        <div>HEALTH: <span id="health">100</span></div>
+        <div><b>SCORE:</b> <span id="score">0</span></div>
+        <div><b>WAVE:</b> <span id="wave">1</span></div>
+        <div><b>HEALTH:</b> <span id="health">100</span></div>
     </div>
     <div id="crosshair"></div>
     <div id="reload-msg">RELOADING...</div>
-    <div id="wave-notify">NEW WAVE</div>
+    <div id="wave-notify">WAVE START</div>
     <div id="ammo-display">
-        <div id="weapon-name">XM7</div>
-        <div style="font-size: 28px;"><span id="current-ammo">45</span> / <span id="max-ammo">45</span></div>
+        <div id="weapon-name" style="font-weight: bold; color: #ffeb3b;">XM7</div>
+        <div style="font-size: 32px;"><span id="current-ammo">45</span> / <span id="max-ammo">45</span></div>
+        <div style="font-size: 12px; opacity: 0.8;">[SPACE] FIRE | [ENTER] ADS</div>
     </div>
 
     <div id="joystick-zone"><div id="joystick-stick"></div></div>
@@ -58,10 +57,10 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- ゲーム設定 ---
+        // --- 設定 ---
         const WEAPONS = {
-            S12K: { name: 'S12K', maxAmmo: 4, rpm: 120, reloadTime: 2000, recoil: 0.12, damage: 30, spread: 0.12, pellets: 8 },
-            XM7: { name: 'XM7', maxAmmo: 45, rpm: 750, reloadTime: 2500, recoil: 0.03, damage: 35, spread: 0.02, pellets: 1 }
+            S12K: { name: 'S12K', maxAmmo: 4, rpm: 150, reloadTime: 1800, recoil: 0.14, damage: 28, spread: 0.13, pellets: 8 },
+            XM7: { name: 'XM7', maxAmmo: 45, rpm: 800, reloadTime: 2200, recoil: 0.04, damage: 32, spread: 0.02, pellets: 1 }
         };
 
         let currentWpnKey = 'XM7';
@@ -74,10 +73,9 @@
         let playerHealth = 100;
         let lastFireTime = 0;
 
-        // --- シーン構築 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87ceeb); // 昼の空
-        scene.fog = new THREE.Fog(0x87ceeb, 20, 100);
+        scene.background = new THREE.Color(0x87ceeb);
+        scene.fog = new THREE.Fog(0x87ceeb, 30, 120);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.rotation.order = 'YXZ';
@@ -86,43 +84,43 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // 明るい照明
-        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambient);
-        const sun = new THREE.DirectionalLight(0xffffff, 1.0);
-        sun.position.set(10, 20, 10);
+        // ライト
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+        sun.position.set(20, 40, 20);
         scene.add(sun);
 
-        // 地面 (グリッド付き)
-        const floorGeo = new THREE.PlaneGeometry(200, 200);
-        const floorMat = new THREE.MeshPhongMaterial({ color: 0x7cfc00 }); // 草原
-        const floor = new THREE.Mesh(floorGeo, floorMat);
+        // フィールド
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(300, 300),
+            new THREE.MeshPhongMaterial({ color: 0x66bb6a })
+        );
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
-        scene.add(new THREE.GridHelper(200, 40, 0x000000, 0x555555));
+        scene.add(new THREE.GridHelper(300, 50, 0x000000, 0x444444));
 
         // 武器
         const weaponGroup = new THREE.Group();
         const weaponMesh = new THREE.Mesh(
-            new THREE.BoxGeometry(0.12, 0.12, 0.6),
-            new THREE.MeshPhongMaterial({ color: 0x222222 })
+            new THREE.BoxGeometry(0.12, 0.15, 0.7),
+            new THREE.MeshPhongMaterial({ color: 0x333333 })
         );
-        weaponMesh.position.set(0.3, -0.25, -0.5);
+        weaponMesh.position.set(0.3, -0.3, -0.5);
         weaponGroup.add(weaponMesh);
         scene.add(weaponGroup);
 
         // 敵
         const enemies = [];
-        const enemyGeo = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
-        const enemyMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const enemyGeo = new THREE.CapsuleGeometry(0.5, 1.2, 4, 8);
+        const enemyMat = new THREE.MeshPhongMaterial({ color: 0xe53935 });
 
         function spawnWave() {
-            const count = 2 + wave * 2;
+            const count = 3 + wave * 2;
             for (let i = 0; i < count; i++) {
                 const enemy = new THREE.Mesh(enemyGeo, enemyMat);
                 const angle = Math.random() * Math.PI * 2;
-                const dist = 30 + Math.random() * 10;
-                enemy.position.set(Math.cos(angle) * dist, 1, Math.sin(angle) * dist);
+                const dist = 40 + Math.random() * 15;
+                enemy.position.set(Math.cos(angle) * dist, 1.1, Math.sin(angle) * dist);
                 enemy.userData = { health: 100, lastAttack: 0 };
                 scene.add(enemy);
                 enemies.push(enemy);
@@ -130,7 +128,7 @@
             const el = document.getElementById('wave-notify');
             el.innerText = `WAVE ${wave}`;
             el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 1500);
+            setTimeout(() => el.style.display = 'none', 1800);
         }
 
         // --- アクション ---
@@ -145,7 +143,7 @@
 
             // 反動
             camera.rotation.x += currentWeapon.recoil;
-            weaponGroup.position.z += 0.1;
+            weaponGroup.position.z += 0.15;
 
             const raycaster = new THREE.Raycaster();
             for (let i = 0; i < currentWeapon.pellets; i++) {
@@ -160,7 +158,7 @@
                     if (target.userData.health <= 0) {
                         scene.remove(target);
                         enemies.splice(enemies.indexOf(target), 1);
-                        score += 100;
+                        score += 150;
                         updateUI();
                     }
                 }
@@ -172,7 +170,7 @@
             if (isReloading || ammo === currentWeapon.maxAmmo) return;
             isReloading = true;
             document.getElementById('reload-msg').style.display = 'block';
-            weaponGroup.position.y = -1; // 武器を下げる
+            weaponGroup.position.y = -1.2;
 
             setTimeout(() => {
                 ammo = currentWeapon.maxAmmo;
@@ -193,11 +191,11 @@
             updateUI();
         }
 
-        function setAds(active) {
-            isAds = active;
-            camera.fov = active ? 40 : 75;
+        function toggleAds() {
+            isAds = !isAds;
+            camera.fov = isAds ? 35 : 75;
             camera.updateProjectionMatrix();
-            weaponGroup.position.x = active ? -0.3 : 0;
+            weaponGroup.position.x = isAds ? -0.3 : 0;
         }
 
         function updateUI() {
@@ -209,120 +207,109 @@
             document.getElementById('health').innerText = Math.max(0, playerHealth);
         }
 
-        // --- モバイル入力処理 ---
+        // --- 入力制御 (更新版) ---
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            
+            // 射撃 (Space)
+            if (e.code === 'Space') {
+                e.preventDefault(); // スクロール防止
+                fire();
+            }
+            // ADS (Enter)
+            if (e.code === 'Enter') {
+                e.preventDefault();
+                toggleAds();
+            }
+            // リロード (R)
+            if (e.code === 'KeyR') reload();
+            // 切り替え (1/2)
+            if (e.code === 'Digit1') { currentWpnKey = 'S12K'; switchWeapon(); }
+            if (e.code === 'Digit2') { currentWpnKey = 'XM7'; switchWeapon(); }
+        });
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // マウスでも一応操作可能
+        window.addEventListener('mousedown', (e) => {
+            if (!document.pointerLockElement && window.innerWidth > 1024) document.body.requestPointerLock();
+            if (e.button === 0) fire();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement) {
+                const sens = isAds ? 0.001 : 0.0022;
+                camera.rotation.y -= e.movementX * sens;
+                camera.rotation.x -= e.movementY * sens;
+                camera.rotation.x = Math.max(-1.4, Math.min(1.4, camera.rotation.x));
+            }
+        });
+
+        // モバイル入力 (ジョイスティック等)
         let moveData = { x: 0, y: 0 };
         const joyStick = document.getElementById('joystick-stick');
         const joyZone = document.getElementById('joystick-zone');
-
-        joyZone.addEventListener('touchstart', (e) => handleJoy(e), {passive: false});
-        joyZone.addEventListener('touchmove', (e) => handleJoy(e), {passive: false});
-        joyZone.addEventListener('touchend', () => {
-            moveData = { x: 0, y: 0 };
-            joyStick.style.transform = `translate(0px, 0px)`;
-        });
+        joyZone.addEventListener('touchstart', handleJoy, {passive: false});
+        joyZone.addEventListener('touchmove', handleJoy, {passive: false});
+        joyZone.addEventListener('touchend', () => { moveData = { x: 0, y: 0 }; joyStick.style.transform = `translate(0px, 0px)`; });
 
         function handleJoy(e) {
             e.preventDefault();
             const touch = e.touches[0];
             const rect = joyZone.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            let dx = touch.clientX - centerX;
-            let dy = touch.clientY - centerY;
+            const dx = touch.clientX - (rect.left + rect.width / 2);
+            const dy = touch.clientY - (rect.top + rect.height / 2);
             const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 50);
             const angle = Math.atan2(dy, dx);
-            
             moveData.x = (Math.cos(angle) * dist) / 50;
             moveData.y = (Math.sin(angle) * dist) / 50;
             joyStick.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
         }
 
-        // 右画面タッチでの視点移動
-        let lastTouch = null;
-        window.addEventListener('touchstart', (e) => {
-            if (e.target.tagName !== 'DIV') lastTouch = e.touches[0];
-        });
-        window.addEventListener('touchmove', (e) => {
-            if (lastTouch && e.touches[0].clientX > window.innerWidth / 2) {
-                const t = e.touches[0];
-                const dx = t.clientX - lastTouch.clientX;
-                const dy = t.clientY - lastTouch.clientY;
-                camera.rotation.y -= dx * 0.005;
-                camera.rotation.x -= dy * 0.005;
-                camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
-                lastTouch = t;
-            }
-        });
-        window.addEventListener('touchend', () => lastTouch = null);
-
         // ボタンイベント
         document.getElementById('fire-btn').addEventListener('touchstart', (e) => { e.preventDefault(); fire(); });
-        document.getElementById('ads-btn').addEventListener('touchstart', (e) => { e.preventDefault(); setAds(!isAds); });
+        document.getElementById('ads-btn').addEventListener('touchstart', (e) => { e.preventDefault(); toggleAds(); });
         document.getElementById('reload-btn').addEventListener('touchstart', (e) => { e.preventDefault(); reload(); });
         document.getElementById('switch-btn').addEventListener('touchstart', (e) => { e.preventDefault(); switchWeapon(); });
 
-        // PC入力
-        const keys = {};
-        window.addEventListener('keydown', (e) => {
-            keys[e.code] = true;
-            if(e.code === 'KeyR') reload();
-            if(e.code === 'Digit1') { currentWpnKey = 'S12K'; switchWeapon(); }
-            if(e.code === 'Digit2') { currentWpnKey = 'XM7'; switchWeapon(); }
-        });
-        window.addEventListener('keyup', (e) => keys[e.code] = false);
-        window.addEventListener('mousedown', (e) => {
-            if (!document.pointerLockElement && window.innerWidth > 1024) document.body.requestPointerLock();
-            if (e.button === 0) fire();
-            if (e.button === 2) setAds(true);
-        });
-        window.addEventListener('mouseup', (e) => { if (e.button === 2) setAds(false); });
-        window.addEventListener('mousemove', (e) => {
-            if (document.pointerLockElement) {
-                const sens = isAds ? 0.001 : 0.002;
-                camera.rotation.y -= e.movementX * sens;
-                camera.rotation.x -= e.movementY * sens;
-                camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
-            }
-        });
-
-        // --- ループ ---
+        // --- メインループ ---
         function animate() {
             requestAnimationFrame(animate);
 
-            // 移動ロジック (PC & Mobile)
-            const moveSpeed = 0.12;
+            // 移動
+            const moveSpeed = 0.13;
             if (keys['KeyW']) camera.translateZ(-moveSpeed);
             if (keys['KeyS']) camera.translateZ(moveSpeed);
             if (keys['KeyA']) camera.translateX(-moveSpeed);
             if (keys['KeyD']) camera.translateX(moveSpeed);
             
-            // モバイルジョイスティック移動
+            // ジョイスティック移動
             camera.position.x += (Math.cos(camera.rotation.y) * moveData.x - Math.sin(camera.rotation.y) * moveData.y) * moveSpeed;
             camera.position.z += (-Math.sin(camera.rotation.y) * moveData.x - Math.cos(camera.rotation.y) * moveData.y) * moveSpeed;
             camera.position.y = 1.6;
 
-            // 武器位置の同期と反動からの復帰
-            weaponGroup.position.lerp(new THREE.Vector3(0,0,0), 0.1);
+            // 武器のアニメーション復帰
+            weaponGroup.position.lerp(new THREE.Vector3(0,0,0), 0.12);
             weaponGroup.quaternion.copy(camera.quaternion);
             weaponGroup.position.add(camera.position);
 
-            // 敵の挙動
+            // 敵AI
             const now = Date.now();
             enemies.forEach(enemy => {
-                const vector = new THREE.Vector3().subVectors(camera.position, enemy.position);
-                vector.y = 0;
-                const dist = vector.length();
+                const vec = new THREE.Vector3().subVectors(camera.position, enemy.position);
+                vec.y = 0;
+                const dist = vec.length();
                 if (dist > 1.8) {
-                    enemy.translateOnAxis(vector.normalize(), 0.04 + (wave * 0.005));
+                    enemy.translateOnAxis(vec.normalize(), 0.05 + (wave * 0.006));
                 } else if (playerHealth > 0) {
-                    if (now - enemy.userData.lastAttack > 1000) {
+                    if (now - enemy.userData.lastAttack > 1200) {
                         playerHealth -= 10;
                         enemy.userData.lastAttack = now;
                         updateUI();
-                        if (playerHealth <= 0) alert("GAME OVER! SCORE: " + score);
+                        if (playerHealth <= 0) { alert("MISSION FAILED! SCORE: " + score); location.reload(); }
                     }
                 }
-                enemy.lookAt(camera.position.x, 1, camera.position.z);
+                enemy.lookAt(camera.position.x, 1.1, camera.position.z);
             });
 
             if (enemies.length === 0) { wave++; spawnWave(); }
@@ -331,7 +318,6 @@
 
         spawnWave();
         animate();
-
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
