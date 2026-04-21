@@ -1,335 +1,259 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Tactical PvE - iPad Hybrid Support</title>
-    <style>
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; touch-action: none; background: #000; }
-        #ui { position: absolute; top: 15px; left: 15px; color: #111; pointer-events: none; background: rgba(255,255,255,0.8); padding: 12px; border-radius: 8px; font-weight: bold; border: 2px solid #444; z-index: 5; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); pointer-events: none; z-index: 5; }
-        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ff00; }
-        #crosshair::before { width: 100%; height: 2px; top: 9px; } #crosshair::after { width: 2px; height: 100%; left: 9px; }
-        
-        #scope-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(circle at center, transparent 30%, black 35%, black 100%);
-            display: none; pointer-events: none; z-index: 10;
-        }
-        #scope-overlay::before, #scope-overlay::after { content: ''; position: absolute; background: rgba(0, 255, 0, 0.5); }
-        #scope-overlay::before { width: 100%; height: 1px; top: 50%; }
-        #scope-overlay::after { width: 1px; height: 100%; left: 50%; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌍 global tax game</title>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js";
+    import { getDatabase, ref, set, get, onValue, update, push } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+    import { getAuth, TwitterAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
-        #ammo-display { position: absolute; bottom: 30px; left: 20px; color: white; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px; border: 1px solid #777; min-width: 140px; z-index: 5; }
-        #reload-msg { position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); color: #ffeb3b; font-size: 24px; font-weight: bold; display: none; text-shadow: 2px 2px #000; z-index: 5; }
-        #click-to-start { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; cursor: pointer; z-index: 100; text-align: center; }
-    </style>
-</head>
-<body>
-    <div id="click-to-start">TAP or CLICK TO DEPLOY<br><span style="font-size:14px;">[WASD]: Move | [Space/Tap]: Fire | [G]: Grenade | [Enter]: ADS</span></div>
-    <div id="scope-overlay"></div>
-    <div id="ui">SCORE: <span id="score">0</span> | WAVE: <span id="wave">1</span> | HP: <span id="health">100</span></div>
-    <div id="reload-msg">RELOADING...</div>
-    <div id="crosshair"></div>
+    // === あなたのFirebase config（そのまま使用）===
+    const firebaseConfig = {
+      apiKey: "AIzaSyCwhHspaG94goiCIjVj3h-Un5pBK3JTjMU",
+      authDomain: "soulkin-aa3b7.firebaseapp.com",
+      databaseURL: "https://soulkin-aa3b7-default-rtdb.firebaseio.com",
+      projectId: "soulkin-aa3b7",
+      storageBucket: "soulkin-aa3b7.firebasestorage.app",
+      messagingSenderId: "358331064206",
+      appId: "1:358331064206:web:d7760ea0919259418a4edf",
+      measurementId: "G-S5Z8TTWYE2"
+    };
 
-    <div id="ammo-display">
-        <div id="weapon-name" style="color: #ffeb3b; font-size: 1.2em;">XM7</div>
-        <div style="font-size: 32px;"><span id="current-ammo">45</span> / <span id="max-ammo">45</span></div>
-    </div>
+    // Firebase初期化
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+    const provider = new TwitterAuthProvider();
 
-    <script type="importmap">
-        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
-    </script>
+    console.log("✅ global tax game - Firebase初期化完了");
 
-    <script type="module">
-        import * as THREE from 'three';
+    // ======================
+    // デフォルト5銘柄を「すでに上場しているもの」として記録
+    // （初回のみ実行。以降は自動でスキップ）
+    // ======================
+    async function initDefaultStocks() {
+      const stocksRef = ref(db, 'stocks');
+      const snapshot = await get(stocksRef);
 
-        // --- 設定 ---
-        const STAGE_SIZE = 100;
-        const WEAPONS = {
-            S12K: { name: 'S12K', maxAmmo: 6, rpm: 180, reloadTime: 2000, recoil: 0.16, damage: 45, spread: 0.15, pellets: 12, color: 0x1a1a1a, adsFov: 55 },
-            XM7: { name: 'XM7', maxAmmo: 40, rpm: 750, reloadTime: 2200, recoil: 0.04, damage: 32, spread: 0.025, pellets: 1, color: 0x7a6a4f, adsFov: 40 },
-            AWM: { name: 'AWM', maxAmmo: 5, rpm: 40, reloadTime: 3800, recoil: 0.8, damage: 350, spread: 0.001, pellets: 1, color: 0x4a5d4a, adsFov: 12 },
-            UZI: { name: 'UZI', maxAmmo: 35, rpm: 1350, reloadTime: 1600, recoil: 0.035, damage: 14, spread: 0.09, pellets: 1, color: 0x222222, adsFov: 65 }
+      if (!snapshot.exists()) {
+        const defaultStocks = {
+          stock1: {
+            id: "stock1",
+            name: "GlobalTech",
+            price: 1200,
+            lastUpdated: Date.now(),
+            owner: null,
+            ownerX: null
+          },
+          stock2: {
+            id: "stock2",
+            name: "EcoEnergy",
+            price: 850,
+            lastUpdated: Date.now(),
+            owner: null,
+            ownerX: null
+          },
+          stock3: {
+            id: "stock3",
+            name: "FinanceKing",
+            price: 2100,
+            lastUpdated: Date.now(),
+            owner: null,
+            ownerX: null
+          },
+          stock4: {
+            id: "stock4",
+            name: "SpaceXplore",
+            price: 650,
+            lastUpdated: Date.now(),
+            owner: null,
+            ownerX: null
+          },
+          stock5: {
+            id: "stock5",
+            name: "MediaMogul",
+            price: 1450,
+            lastUpdated: Date.now(),
+            owner: null,
+            ownerX: null
+          }
         };
 
-        let currentWeapon = WEAPONS.XM7;
-        let ammo = currentWeapon.maxAmmo, isReloading = false, isAds = false;
-        let score = 0, wave = 1, playerHealth = 100, lastFireTime = 0, targetRecoilX = 0;
-        
-        // 敵出現率アップ用
-        let lastSpawnTime = Date.now();
-        
-        // iPadキーボード環境向けタッチ射撃修正用
-        let touchStartTime = 0;
-        let touchStartX = 0;
-        let touchStartY = 0;
+        await set(stocksRef, defaultStocks);
+        console.log("✅ デフォルト5銘柄を『すでに上場済み』としてRealtime Databaseに記録しました");
+      } else {
+        console.log("✅ デフォルト銘柄はすでに存在しています");
+      }
+    }
 
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87ceeb);
-        scene.fog = new THREE.Fog(0x87ceeb, 20, 150);
+    // ======================
+    // 1分ごとに株価を自動変動（全プレイヤー共通）
+    // ======================
+    async function fluctuatePrices() {
+      const stocksRef = ref(db, 'stocks');
+      const snapshot = await get(stocksRef);
+      const stocks = snapshot.val();
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
-        camera.rotation.order = 'YXZ';
-        camera.position.set(0, 1.6, 20);
+      if (!stocks) return;
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
+      const updates = {};
+      Object.keys(stocks).forEach(key => {
+        const stock = stocks[key];
+        // ±5% のランダム変動（より自然な動き）
+        const changeRate = (Math.random() * 0.10) - 0.05;
+        const newPrice = Math.max(100, Math.round(stock.price * (1 + changeRate))); // 最低100円
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-        const sun = new THREE.DirectionalLight(0xffffff, 1.0);
-        sun.position.set(30, 60, 30);
-        scene.add(sun);
+        updates[`stocks/${key}/price`] = newPrice;
+        updates[`stocks/${key}/lastUpdated`] = Date.now();
+      });
 
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(STAGE_SIZE, STAGE_SIZE), new THREE.MeshStandardMaterial({ color: 0x6a8a6a }));
-        floor.rotation.x = -Math.PI / 2;
-        scene.add(floor);
+      await update(ref(db), updates);
+      console.log("📈 1分ごとの株価変動を実行しました");
+    }
 
-        const obstacles = [];
-        const boxMat = new THREE.MeshStandardMaterial({ color: 0x554433, roughness: 0.8 });
-        function addBox(w, h, d, x, z) {
-            const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), boxMat);
-            box.position.set(x, h/2, z); scene.add(box); obstacles.push(box);
-        }
-        addBox(4, 3, 4, 10, 10); addBox(6, 2, 3, -15, 20); addBox(3, 4, 3, 20, -15); addBox(5, 2, 5, -5, -10);
+    // ======================
+    // 株一覧をリアルタイムで表示
+    // ======================
+    function renderStockList(stocks) {
+      const container = document.getElementById('stockList');
+      if (!stocks) {
+        container.innerHTML = "<p>現在上場している銘柄はありません</p>";
+        return;
+      }
 
-        const towerGroup = new THREE.Group();
-        const platform = new THREE.Mesh(new THREE.BoxGeometry(6, 0.4, 6), boxMat);
-        platform.position.y = 6;
-        towerGroup.add(platform);
-        towerGroup.position.set(-40, 0, -40);
-        scene.add(towerGroup);
-        obstacles.push(platform);
+      let html = `
+        <h2>📊 上場銘柄一覧（リアルタイム）</h2>
+        <table border="1" style="width:100%; border-collapse:collapse; text-align:center;">
+          <thead>
+            <tr style="background:#222; color:#fff;">
+              <th>銘柄名</th>
+              <th>現在価格</th>
+              <th>所有者（X）</th>
+              <th>最終更新</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
 
-        const weaponGroup = new THREE.Group();
-        const weaponPivot = new THREE.Group();
-        const gunContainer = new THREE.Group();
-        const muzzleFlash = new THREE.PointLight(0xffaa00, 0, 5);
-        const flashMesh = new THREE.Mesh(new THREE.SphereGeometry(0.05), new THREE.MeshBasicMaterial({color: 0xffff00}));
-        flashMesh.visible = false;
-        gunContainer.add(muzzleFlash, flashMesh);
+      Object.keys(stocks).forEach(key => {
+        const s = stocks[key];
+        const time = new Date(s.lastUpdated).toLocaleTimeString('ja-JP');
+        const ownerText = s.ownerX ? `@${s.ownerX}` : '---';
+        html += `
+          <tr>
+            <td>${s.name}</td>
+            <td><strong>¥${s.price.toLocaleString()}</strong></td>
+            <td>${ownerText}</td>
+            <td>${time}</td>
+          </tr>
+        `;
+      });
 
-        function buildGunModel(config) {
-            gunContainer.clear(); gunContainer.add(muzzleFlash, flashMesh);
-            const mat = new THREE.MeshStandardMaterial({ color: config.color, metalness: 0.6, roughness: 0.4 });
-            let bL = config.name === 'UZI' ? 0.35 : 0.6;
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, bL), mat); gunContainer.add(body);
-            const barrelLen = config.name === 'AWM' ? 0.8 : (config.name === 'UZI' ? 0.15 : 0.4);
-            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, barrelLen), mat);
-            barrel.rotation.x = Math.PI / 2; barrel.position.z = - (bL/2 + barrelLen/2); gunContainer.add(barrel);
-            flashMesh.position.z = barrel.position.z - barrelLen/2; muzzleFlash.position.copy(flashMesh.position);
-            if (config.name === 'AWM') {
-                const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3), mat);
-                scope.rotation.x = Math.PI / 2; scope.position.y = 0.12; gunContainer.add(scope);
-            }
-            gunContainer.position.set(0.3, -0.25, -0.6); return gunContainer;
-        }
+      html += `</tbody></table>`;
+      container.innerHTML = html;
+    }
 
-        weaponPivot.add(buildGunModel(currentWeapon));
-        weaponGroup.add(weaponPivot); scene.add(weaponGroup);
+    // ======================
+    // Xログイン（Twitter Auth）
+    // ======================
+    async function loginWithX() {
+      try {
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        const screenName = user.providerData[0].screenName;
 
-        const grenades = [], blasts = [], enemies = [];
-        function throwGrenade() {
-            const g = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshStandardMaterial({color: 0x224422}));
-            g.position.copy(camera.position);
-            const dir = camera.getWorldDirection(new THREE.Vector3());
-            g.userData = { velocity: dir.multiplyScalar(0.55).add(new THREE.Vector3(0, 0.15, 0)), life: 120 };
-            scene.add(g); grenades.push(g);
-        }
+        document.getElementById('status').innerHTML = `
+          ✅ Xログイン成功！<br>
+          <strong>@${screenName}</strong> さん<br>
+          <button onclick="listMyStock()" style="margin-top:10px; padding:10px 20px; font-size:16px;">自分の会社を上場する</button>
+        `;
+        console.log("X連携完了", user);
+      } catch (error) {
+        console.error("ログイン失敗", error);
+        document.getElementById('status').innerHTML = `❌ ログイン失敗: ${error.message}`;
+      }
+    }
 
-        function createExplosion(pos) {
-            const exp = new THREE.Mesh(new THREE.SphereGeometry(1), new THREE.MeshBasicMaterial({color: 0xffaa00, transparent: true, opacity: 0.8}));
-            exp.position.copy(pos); scene.add(exp);
-            blasts.push({ mesh: exp, scale: 1, alpha: 0.8 });
-            const blastLight = new THREE.PointLight(0xff5500, 15, 12); blastLight.position.copy(pos);
-            scene.add(blastLight); setTimeout(() => scene.remove(blastLight), 150);
-            enemies.forEach(e => {
-                const dist = e.position.distanceTo(pos);
-                if(dist < 7.5) {
-                    e.userData.hp -= (dist < 3 ? 500 : 200);
-                    if(e.userData.hp <= 0) { scene.remove(e); enemies.splice(enemies.indexOf(e), 1); score += 150; }
-                }
-            });
-        }
+    // ======================
+    // 自分の株を上場
+    // ======================
+    window.listMyStock = async function() {
+      const user = auth.currentUser;
+      if (!user) {
+        alert("先にXログインしてください");
+        return;
+      }
 
-        function spawnEnemy() {
-            const e = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1, 4, 8), new THREE.MeshStandardMaterial({ color: 0xcc3333 }));
-            e.position.set((Math.random()-0.5)*80, 1, (Math.random()-0.5)*80);
-            e.userData = { hp: 100, lastAtk: 0, steerAngle: 0 };
-            scene.add(e); enemies.push(e);
-        }
+      const stockName = prompt("上場する会社の名前を入力してください", `${user.providerData[0].screenName} Inc.`);
+      if (!stockName) return;
 
-        function fire() {
-            if (isReloading || ammo <= 0 || playerHealth <= 0) return;
-            const now = Date.now();
-            if (now - lastFireTime < (60000 / currentWeapon.rpm)) return;
-            ammo--; lastFireTime = now; updateUI(); 
-            flashMesh.visible = true; muzzleFlash.intensity = 15;
-            setTimeout(() => { flashMesh.visible = false; muzzleFlash.intensity = 0; }, 35);
-            targetRecoilX += currentWeapon.recoil; weaponPivot.position.z += 0.12;
-            const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2(0,0), camera);
-            const hits = ray.intersectObjects(enemies);
-            if(hits.length > 0) {
-                const e = hits[0].object; e.userData.hp -= currentWeapon.damage;
-                if(e.userData.hp <= 0) { scene.remove(e); enemies.splice(enemies.indexOf(e), 1); score += 100; }
-            }
-            if(ammo === 0) reload();
-        }
+      const newStockRef = push(ref(db, 'stocks'));
+      await set(newStockRef, {
+        id: newStockRef.key,
+        name: stockName,
+        price: 1000,
+        lastUpdated: Date.now(),
+        owner: user.uid,
+        ownerX: user.providerData[0].screenName
+      });
 
-        function reload() {
-            if(isReloading || ammo === currentWeapon.maxAmmo) return;
-            isReloading = true; document.getElementById('reload-msg').style.display = 'block';
-            setTimeout(() => { ammo = currentWeapon.maxAmmo; isReloading = false; document.getElementById('reload-msg').style.display = 'none'; updateUI(); }, currentWeapon.reloadTime);
-        }
+      alert(`🎉 「${stockName}」が上場しました！`);
+    };
 
-        function switchWeapon(key) {
-            currentWeapon = WEAPONS[key]; buildGunModel(currentWeapon);
-            ammo = currentWeapon.maxAmmo; isAds = false; updateScope(); updateUI();
-        }
+    // ======================
+    // メイン処理
+    // ======================
+    window.onload = () => {
+      // デフォルト銘柄を「すでに上場済み」として記録
+      initDefaultStocks();
 
-        function updateScope() {
-            camera.fov = isAds ? currentWeapon.adsFov : 75; camera.updateProjectionMatrix();
-            const scope = document.getElementById('scope-overlay');
-            if (isAds && currentWeapon.name === 'AWM') { scope.style.display = 'block'; gunContainer.visible = false; }
-            else { scope.style.display = 'none'; gunContainer.visible = true; gunContainer.position.set(isAds ? 0 : 0.3, isAds ? -0.12 : -0.25, -0.6); }
-        }
+      // 1分ごとの株価変動（全クライアント共通）
+      setInterval(fluctuatePrices, 60000);
 
-        function updateUI() {
-            document.getElementById('current-ammo').innerText = ammo; document.getElementById('weapon-name').innerText = currentWeapon.name;
-            document.getElementById('score').innerText = score; document.getElementById('wave').innerText = wave; document.getElementById('health').innerText = playerHealth;
-        }
+      // 株価のリアルタイム監視
+      const stocksRef = ref(db, 'stocks');
+      onValue(stocksRef, (snapshot) => {
+        const stocks = snapshot.val();
+        renderStockList(stocks);
+      });
 
-        // --- 入力制御 (Hybrid) ---
-        const keys = {};
-        let lastTouchX = 0, lastTouchY = 0;
+      // Xログインボタン
+      document.getElementById('loginBtn').addEventListener('click', loginWithX);
 
-        window.addEventListener('keydown', (e) => {
-            keys[e.code] = true;
-            if(e.code === 'Space') fire();
-            if(e.code === 'KeyG') throwGrenade();
-            if(e.code === 'Enter') { isAds = !isAds; updateScope(); }
-            if(e.code === 'KeyR') reload();
-            if(e.code.startsWith('Digit')) switchWeapon(Object.keys(WEAPONS)[parseInt(e.key)-1]);
-        });
-        window.addEventListener('keyup', (e) => keys[e.code] = false);
+      console.log("🚀 global tax game 起動完了！");
+    };
+  </script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; background: #0f172a; color: #e2e8f0; }
+    h1 { text-align: center; font-size: 2.5rem; }
+    button { padding: 12px 24px; font-size: 18px; background: #1da1f2; color: white; border: none; border-radius: 8px; cursor: pointer; }
+    button:hover { background: #0c8ad8; }
+    #status { margin: 20px 0; padding: 15px; background: #1e2937; border-radius: 8px; }
+    table { margin-top: 20px; }
+    th, td { padding: 12px; border: 1px solid #334155; }
+  </style>
+</head>
+<body>
+  <h1>🌍 global tax game</h1>
+  <p style="text-align:center; font-size:1.2rem;">リアルタイム投資ゲーム<br>1分ごとに株価変動・X連携で誰でも上場可能</p>
 
-        // マウス視点移動
-        window.addEventListener('mousemove', (e) => {
-            if (document.pointerLockElement) {
-                const s = isAds ? (currentWeapon.adsFov / 75) * 0.002 : 0.0022;
-                camera.rotation.y -= e.movementX * s; camera.rotation.x -= e.movementY * s;
-                camera.rotation.x = Math.max(-1.4, Math.min(1.4, camera.rotation.x));
-            }
-        });
+  <div style="text-align:center; margin:30px 0;">
+    <button id="loginBtn">Xでログインして株式上場する</button>
+  </div>
 
-        // タッチ視点移動 + タップ射撃（iPadキーボード環境修正）
-        // 右側をドラッグしても射撃されず、素早いタップのみ射撃するように変更
-        window.addEventListener('touchstart', (e) => {
-            const touch = e.touches[0];
-            lastTouchX = touch.clientX;
-            lastTouchY = touch.clientY;
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
-            touchStartTime = Date.now();
-            // ここでは射撃せず、touchendでタップ判定を行う
-        }, {passive: false});
+  <div id="status" style="text-align:center; min-height:60px;"></div>
 
-        window.addEventListener('touchmove', (e) => {
-            const t = e.touches[0];
-            const dx = t.clientX - lastTouchX, dy = t.clientY - lastTouchY;
-            const s = isAds ? 0.003 : 0.005;
-            camera.rotation.y -= dx * s; camera.rotation.x -= dy * s;
-            camera.rotation.x = Math.max(-1.4, Math.min(1.4, camera.rotation.x));
-            lastTouchX = t.clientX; lastTouchY = t.clientY;
-            e.preventDefault();
-        }, {passive: false});
+  <div id="stockList" style="margin-top:30px;">
+    <!-- リアルタイムで株一覧がここに表示されます -->
+  </div>
 
-        // タップ判定（短時間・小移動のみ射撃）→ これで右側タッチ時の無条件射撃を完全修正
-        window.addEventListener('touchend', (e) => {
-            if (e.changedTouches.length === 0) return;
-            const touch = e.changedTouches[0];
-            const dx = touch.clientX - touchStartX;
-            const dy = touch.clientY - touchStartY;
-            const dist = Math.hypot(dx, dy);
-            const duration = Date.now() - touchStartTime;
-            
-            // 素早いタップ（移動20px以内、300ms以内）のみ射撃
-            if (dist < 20 && duration < 300 && playerHealth > 0) {
-                fire();
-            }
-        }, {passive: false});
-
-        document.getElementById('click-to-start').addEventListener('click', function() { 
-            this.style.display = 'none'; 
-            document.body.requestPointerLock(); 
-        });
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const now = Date.now();
-            camera.rotation.x += targetRecoilX * 0.1; targetRecoilX *= 0.9;
-            weaponPivot.position.lerp(new THREE.Vector3(0,0,0), 0.2);
-            weaponGroup.position.copy(camera.position); weaponGroup.quaternion.copy(camera.quaternion);
-
-            for(let i=grenades.length-1; i>=0; i--) {
-                const g = grenades[i]; g.position.add(g.userData.velocity); g.userData.velocity.y -= 0.015;
-                if(g.position.y < 0.15) { g.position.y = 0.15; g.userData.velocity.multiplyScalar(0.5); }
-                if(--g.userData.life <= 0) { createExplosion(g.position); scene.remove(g); grenades.splice(i, 1); }
-            }
-
-            for(let i=blasts.length-1; i>=0; i--) {
-                const b = blasts[i]; b.scale += 0.4; b.alpha -= 0.05;
-                b.mesh.scale.set(b.scale, b.scale, b.scale); b.mesh.material.opacity = b.alpha;
-                if(b.alpha <= 0) { scene.remove(b.mesh); blasts.splice(i, 1); }
-            }
-
-            const move = new THREE.Vector3();
-            if(keys['KeyW']) move.z -= 1; if(keys['KeyS']) move.z += 1;
-            if(keys['KeyA']) move.x -= 1; if(keys['KeyD']) move.x += 1;
-            move.applyQuaternion(camera.quaternion); move.y = 0;
-            const nextPos = camera.position.clone().add(move.normalize().multiplyScalar(0.15));
-            let canMove = true;
-            obstacles.forEach(ob => { if(new THREE.Box3().setFromObject(ob).containsPoint(nextPos)) canMove = false; });
-            if(canMove) { camera.position.x = nextPos.x; camera.position.z = nextPos.z; }
-
-            const rayDown = new THREE.Raycaster(new THREE.Vector3(camera.position.x, 10, camera.position.z), new THREE.Vector3(0, -1, 0));
-            const groundHits = rayDown.intersectObjects([floor, platform]);
-            if (groundHits.length > 0) camera.position.y = THREE.MathUtils.lerp(camera.position.y, groundHits[0].point.y + 1.6, 0.2);
-
-            enemies.forEach(e => {
-                const toP = new THREE.Vector3().subVectors(camera.position, e.position); toP.y = 0;
-                const dist = toP.length(), dir = toP.normalize();
-                if(new THREE.Raycaster(e.position, dir, 0, 3).intersectObjects(obstacles).length > 0) e.userData.steerAngle += 0.15; else e.userData.steerAngle *= 0.9;
-                const fDir = dir.applyAxisAngle(new THREE.Vector3(0,1,0), e.userData.steerAngle);
-                if(dist > 1.8) e.position.add(fDir.multiplyScalar(0.05 + wave*0.003));
-                else if(playerHealth > 0 && now - e.userData.lastAtk > 1000) {
-                    playerHealth -= 10; e.userData.lastAtk = now; updateUI();
-                    if(playerHealth <= 0) { alert("FAILED. SCORE: " + score); location.reload(); }
-                }
-                e.lookAt(camera.position.x, 1, camera.position.z);
-            });
-
-            // 波クリア判定（そのまま）
-            if(enemies.length === 0) { 
-                wave++; 
-                for(let i=0; i<2+wave; i++) spawnEnemy(); 
-            }
-
-            // ★ 敵の出現率を大幅アップ ★
-            // 波進行中も定期的に敵を追加スポーン（波数が高いほど出現間隔が短くなる）
-            const spawnInterval = Math.max(1000, 4200 - wave * 350); // wave1≈3850ms → wave5≈2550ms → wave10≈700ms
-            if (now - lastSpawnTime > spawnInterval) {
-                spawnEnemy();
-                lastSpawnTime = now;
-            }
-
-            renderer.render(scene, camera);
-        }
-        spawnEnemy(); 
-        lastSpawnTime = Date.now(); // 初期スポーン後にタイマー開始
-        updateUI(); 
-        animate();
-    </script>
+  <p style="text-align:center; font-size:0.9rem; margin-top:50px; color:#64748b;">
+    ※ Firebase Realtime Database を使用しています。<br>
+    初回アクセスでデフォルト5銘柄が自動記録されます。
+  </p>
 </body>
 </html>
