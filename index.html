@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Tactical PvE - Hybrid iPad Edition</title>
+    <title>3D Tactical PvE - Continuous Survival</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; touch-action: none; background: #000; }
         #ui { position: absolute; top: 15px; left: 15px; color: #111; pointer-events: none; background: rgba(255,255,255,0.8); padding: 12px; border-radius: 8px; font-weight: bold; border: 2px solid #444; z-index: 5; }
@@ -26,9 +26,9 @@
     </style>
 </head>
 <body>
-    <div id="click-to-start">CLICK TO DEPLOY<br><span style="font-size:14px;">[WASD]: Move | [Swipe]: Look | [Space]: Fire | [Enter]: ADS</span></div>
+    <div id="click-to-start">CLICK TO DEPLOY<br><span style="font-size:14px;">[WASD]: Move | [Swipe]: Look | [Space]: Fire | [Enter]: ADS | [1-4]: Switch</span></div>
     <div id="scope-overlay"></div>
-    <div id="ui">SCORE: <span id="score">0</span> | WAVE: <span id="wave">1</span> | HP: <span id="health">100</span></div>
+    <div id="ui">SCORE: <span id="score">0</span> | HP: <span id="health">100</span></div>
     <div id="reload-msg">RELOADING...</div>
     <div id="crosshair"></div>
 
@@ -46,16 +46,19 @@
 
         // --- 設定 ---
         const STAGE_SIZE = 100;
+        const SPAWN_INTERVAL = 2000; // 敵が出る間隔 (ミリ秒)
+        const MAX_ENEMIES = 15;      // 同時に存在できる敵の最大数
+
         const WEAPONS = {
-            S12K: { name: 'S12K', maxAmmo: 4, rpm: 200, reloadTime: 1800, recoil: 0.14, damage: 30, spread: 0.14, pellets: 10, color: 0x1a1a1a, adsFov: 50 },
-            XM7: { name: 'XM7', maxAmmo: 45, rpm: 800, reloadTime: 2200, recoil: 0.04, damage: 35, spread: 0.02, pellets: 1, color: 0x7a6a4f, adsFov: 40 },
-            AWM: { name: 'AWM', maxAmmo: 5, rpm: 45, reloadTime: 3500, recoil: 0.6, damage: 200, spread: 0.001, pellets: 1, color: 0x4a5d4a, adsFov: 15 },
-            UZI: { name: 'UZI', maxAmmo: 32, rpm: 1200, reloadTime: 1500, recoil: 0.03, damage: 15, spread: 0.08, pellets: 1, color: 0x333333, adsFov: 60 }
+            S12K: { name: 'S12K', maxAmmo: 4, ammo: 4, rpm: 200, reloadTime: 1800, recoil: 0.14, damage: 30, spread: 0.14, pellets: 10, color: 0x1a1a1a, adsFov: 50 },
+            XM7: { name: 'XM7', maxAmmo: 45, ammo: 45, rpm: 800, reloadTime: 2200, recoil: 0.04, damage: 35, spread: 0.02, pellets: 1, color: 0x7a6a4f, adsFov: 40 },
+            AWM: { name: 'AWM', maxAmmo: 5, ammo: 5, rpm: 45, reloadTime: 3500, recoil: 0.6, damage: 200, spread: 0.001, pellets: 1, color: 0x4a5d4a, adsFov: 15 },
+            UZI: { name: 'UZI', maxAmmo: 32, ammo: 32, rpm: 1200, reloadTime: 1500, recoil: 0.03, damage: 15, spread: 0.08, pellets: 1, color: 0x333333, adsFov: 60 }
         };
 
         let currentWeapon = WEAPONS.XM7;
-        let ammo = currentWeapon.maxAmmo, isReloading = false, isAds = false;
-        let score = 0, wave = 1, playerHealth = 100, lastFireTime = 0, targetRecoilX = 0;
+        let isReloading = false, isAds = false;
+        let score = 0, playerHealth = 100, lastFireTime = 0, targetRecoilX = 0, lastSpawnTime = 0;
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
@@ -120,10 +123,16 @@
 
         const tracers = [], enemies = [];
         function spawnEnemy() {
+            if (enemies.length >= MAX_ENEMIES) return; // 敵が多すぎるときはスキップ
             const e = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1, 4, 8), new THREE.MeshStandardMaterial({ color: 0xcc3333 }));
-            const margin = 5;
-            let ex = (Math.random() - 0.5) * (STAGE_SIZE - margin * 2);
-            let ez = (Math.random() - 0.5) * (STAGE_SIZE - margin * 2);
+            const margin = 10;
+            // プレイヤーから離れた場所にスポーンさせる
+            let ex, ez;
+            do {
+                ex = (Math.random() - 0.5) * (STAGE_SIZE - margin * 2);
+                ez = (Math.random() - 0.5) * (STAGE_SIZE - margin * 2);
+            } while (new THREE.Vector2(ex, ez).distanceTo(new THREE.Vector2(camera.position.x, camera.position.z)) < 15);
+            
             e.position.set(ex, 1, ez);
             e.userData = { hp: 100, lastAtk: 0 };
             scene.add(e);
@@ -131,10 +140,14 @@
         }
 
         function fire() {
-            if (isReloading || ammo <= 0 || playerHealth <= 0) return;
+            if (isReloading || currentWeapon.ammo <= 0 || playerHealth <= 0) return;
             const now = Date.now();
             if (now - lastFireTime < (60000 / currentWeapon.rpm)) return;
-            ammo--; lastFireTime = now; updateUI();
+            
+            currentWeapon.ammo--; 
+            lastFireTime = now; 
+            updateUI();
+            
             targetRecoilX += currentWeapon.recoil;
             weaponPivot.position.z += 0.2; weaponPivot.rotation.x -= 0.15;
             const ray = new THREE.Raycaster();
@@ -154,24 +167,33 @@
                     if(e.userData.hp <= 0) { scene.remove(e); enemies.splice(enemies.indexOf(e), 1); score += 100; }
                 }
             }
-            if(ammo === 0) reload();
+            if(currentWeapon.ammo === 0) reload();
         }
 
         function reload() {
-            if(isReloading || ammo === currentWeapon.maxAmmo) return;
+            if(isReloading || currentWeapon.ammo === currentWeapon.maxAmmo) return;
             isReloading = true;
             document.getElementById('reload-msg').style.display = 'block';
             setTimeout(() => {
-                ammo = currentWeapon.maxAmmo; isReloading = false;
+                currentWeapon.ammo = currentWeapon.maxAmmo; 
+                isReloading = false;
                 document.getElementById('reload-msg').style.display = 'none';
                 updateUI();
             }, currentWeapon.reloadTime);
         }
 
         function switchWeapon(key) {
-            currentWeapon = WEAPONS[key]; buildGunModel(currentWeapon);
-            ammo = currentWeapon.maxAmmo; isAds = false;
-            updateScope(); updateUI();
+            // 現在リロード中の場合はキャンセル、または武器切り替えを制限する場合はここで制御
+            // 今回はシンプルに、切り替え時にリロード中フラグをリセットします
+            isReloading = false;
+            document.getElementById('reload-msg').style.display = 'none';
+
+            currentWeapon = WEAPONS[key]; 
+            buildGunModel(currentWeapon);
+            // 弾数は currentWeapon.ammo をそのまま使う（リセットしない）
+            isAds = false;
+            updateScope(); 
+            updateUI();
         }
 
         function updateScope() {
@@ -193,15 +215,14 @@
         }
 
         function updateUI() {
-            document.getElementById('current-ammo').innerText = ammo;
+            document.getElementById('current-ammo').innerText = currentWeapon.ammo;
             document.getElementById('max-ammo').innerText = currentWeapon.maxAmmo;
             document.getElementById('weapon-name').innerText = currentWeapon.name;
             document.getElementById('score').innerText = score;
-            document.getElementById('wave').innerText = wave;
             document.getElementById('health').innerText = Math.max(0, playerHealth);
         }
 
-        // --- 操作系 (iPad Hybrid) ---
+        // --- 操作系 ---
         const keys = {};
         let lastTouchX = 0, lastTouchY = 0;
 
@@ -217,7 +238,6 @@
         });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        // トラックパッド/マウス視点移動
         window.addEventListener('mousemove', (e) => {
             if (document.pointerLockElement) {
                 const sens = isAds ? (currentWeapon.adsFov / 75) * 0.002 : 0.0022;
@@ -227,7 +247,6 @@
             }
         });
 
-        // 画面スワイプ視点移動 (iPad画面直接タッチ)
         window.addEventListener('touchstart', (e) => {
             const t = e.touches[0];
             lastTouchX = t.clientX; lastTouchY = t.clientY;
@@ -237,20 +256,16 @@
             const t = e.touches[0];
             const dx = t.clientX - lastTouchX;
             const dy = t.clientY - lastTouchY;
-            
-            // スワイプ感度の調整（ADS中は遅くする）
             const sens = isAds ? (currentWeapon.adsFov / 75) * 0.006 : 0.008;
             camera.rotation.y -= dx * sens;
             camera.rotation.x -= dy * sens;
             camera.rotation.x = Math.max(-1.4, Math.min(1.4, camera.rotation.x));
-
             lastTouchX = t.clientX; lastTouchY = t.clientY;
-            e.preventDefault(); // ブラウザのスクロール等を防止
+            e.preventDefault();
         }, {passive: false});
 
         document.getElementById('click-to-start').addEventListener('click', function() {
             this.style.display = 'none';
-            // トラックパッド使用時のためにポインターロックを試みる（任意）
             if (navigator.maxTouchPoints <= 1) document.body.requestPointerLock();
         });
 
@@ -258,6 +273,13 @@
         function animate() {
             requestAnimationFrame(animate);
             const now = Date.now();
+
+            // 敵の自動スポーン
+            if (now - lastSpawnTime > SPAWN_INTERVAL) {
+                spawnEnemy();
+                lastSpawnTime = now;
+            }
+
             if (now - lastFireTime > 120) targetRecoilX *= 0.8;
             camera.rotation.x += targetRecoilX * 0.1;
             targetRecoilX *= 0.92;
@@ -293,15 +315,16 @@
             enemies.forEach(e => {
                 const v = new THREE.Vector3().subVectors(camera.position, e.position);
                 v.y = 0;
-                if(v.length() > 1.8) e.translateOnAxis(v.normalize(), 0.06 + wave*0.005);
+                // 敵の移動速度を少しずつ上げる（スコアに応じて難易度上昇）
+                const speed = 0.06 + Math.min(score * 0.000001, 0.05);
+                if(v.length() > 1.8) e.translateOnAxis(v.normalize(), speed);
                 else if(playerHealth > 0 && now - e.userData.lastAtk > 1000) {
                     playerHealth -= 10; e.userData.lastAtk = now; updateUI();
-                    if(playerHealth <= 0) { alert("DEAD. SCORE: " + score); location.reload(); }
+                    if(playerHealth <= 0) { alert("GAME OVER. SCORE: " + score); location.reload(); }
                 }
                 e.lookAt(camera.position.x, 1, camera.position.z);
             });
 
-            if(enemies.length === 0) { wave++; for(let i=0; i<3+wave; i++) spawnEnemy(); }
             renderer.render(scene, camera);
         }
 
