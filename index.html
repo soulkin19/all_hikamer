@@ -1,352 +1,205 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🌍 global tax game</title>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js";
-    import { getDatabase, ref, set, get, onValue, update, push } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-
-    // === あなたのFirebase config（そのまま使用）===
-    const firebaseConfig = {
-      apiKey: "AIzaSyCwhHspaG94goiCIjVj3h-Un5pBK3JTjMU",
-      authDomain: "soulkin-aa3b7.firebaseapp.com",
-      databaseURL: "https://soulkin-aa3b7-default-rtdb.firebaseio.com",
-      projectId: "soulkin-aa3b7",
-      storageBucket: "soulkin-aa3b7.firebasestorage.app",
-      messagingSenderId: "358331064206",
-      appId: "1:358331064206:web:d7760ea0919259418a4edf",
-      measurementId: "G-S5Z8TTWYE2"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
-    const db = getDatabase(app);
-    const auth = getAuth(app);
-    const googleProvider = new GoogleAuthProvider();
-
-    console.log("✅ global tax game - Firebase初期化完了");
-
-    // グローバル変数
-    let currentUser = null;
-    let userData = null;      // { cash, portfolio, googleDisplayName }
-    let stocksData = null;
-
-    // ======================
-    // デフォルト5銘柄を「すでに上場済み」として記録
-    // ======================
-    async function initDefaultStocks() {
-      const stocksRef = ref(db, 'stocks');
-      const snapshot = await get(stocksRef);
-      if (!snapshot.exists()) {
-        const defaultStocks = {
-          stock1: { id: "stock1", name: "GlobalTech",     price: 1200, lastUpdated: Date.now(), owner: null, ownerName: null },
-          stock2: { id: "stock2", name: "EcoEnergy",      price: 850,  lastUpdated: Date.now(), owner: null, ownerName: null },
-          stock3: { id: "stock3", name: "FinanceKing",    price: 2100, lastUpdated: Date.now(), owner: null, ownerName: null },
-          stock4: { id: "stock4", name: "SpaceXplore",    price: 650,  lastUpdated: Date.now(), owner: null, ownerName: null },
-          stock5: { id: "stock5", name: "MediaMogul",     price: 1450, lastUpdated: Date.now(), owner: null, ownerName: null }
-        };
-        await set(stocksRef, defaultStocks);
-        console.log("✅ デフォルト5銘柄を『すでに上場済み』として記録しました");
-      }
-    }
-
-    // ======================
-    // ユーザー初期データ（資金10万円）→ 匿名でもGoogleでも自動作成
-    // ======================
-    async function ensureUserData(uid) {
-      const userRef = ref(db, `users/${uid}`);
-      const snapshot = await get(userRef);
-      if (!snapshot.exists()) {
-        await set(userRef, {
-          cash: 100000,
-          portfolio: {},
-          googleDisplayName: null
-        });
-        console.log("✅ 資金10万円を自動付与（ログイン不要）");
-      }
-    }
-
-    // ======================
-    // 1分ごとに株価自動変動（全プレイヤー共通）
-    // ======================
-    async function fluctuatePrices() {
-      if (!stocksData) return;
-      const updates = {};
-      Object.keys(stocksData).forEach(key => {
-        const stock = stocksData[key];
-        const changeRate = (Math.random() * 0.10) - 0.05;
-        let newPrice = Math.max(100, Math.round(stock.price * (1 + changeRate)));
-        updates[`stocks/${key}/price`] = newPrice;
-        updates[`stocks/${key}/lastUpdated`] = Date.now();
-      });
-      if (Object.keys(updates).length > 0) {
-        await update(ref(db), updates);
-      }
-    }
-
-    // ======================
-    // 購入（買われるほど価格が上がる）
-    // ======================
-    window.buyStock = async function(stockId, quantity) {
-      if (quantity < 1) return alert("数量は1以上を入力してください");
-
-      const stockRef = ref(db, `stocks/${stockId}`);
-      const stockSnap = await get(stockRef);
-      const stock = stockSnap.val();
-      if (!stock) return alert("銘柄が見つかりません");
-
-      const userRef = ref(db, `users/${currentUser.uid}`);
-      const userSnap = await get(userRef);
-      const user = userSnap.val();
-
-      const cost = stock.price * quantity;
-      if (user.cash < cost) {
-        alert(`❌ 資金不足です！\n必要: ¥${cost.toLocaleString()} / 所持: ¥${user.cash.toLocaleString()}`);
-        return;
-      }
-
-      const currentShares = user.portfolio?.[stockId]?.shares || 0;
-      const newCash = user.cash - cost;
-      const newPortfolio = { ...user.portfolio, [stockId]: { shares: currentShares + quantity } };
-
-      await update(userRef, { cash: newCash, portfolio: newPortfolio });
-
-      // 買圧で価格上昇
-      const impact = 1 + (quantity * 0.0008);
-      const newPrice = Math.max(100, Math.round(stock.price * impact));
-      await update(stockRef, { price: newPrice, lastUpdated: Date.now() });
-
-      alert(`✅ ${stock.name} を ${quantity}株 購入しました！\n価格が上昇傾向になりました`);
-    };
-
-    // ======================
-    // 売却（売られるほど価格が下がる）
-    // ======================
-    window.sellStock = async function(stockId, quantity) {
-      if (quantity < 1) return alert("数量は1以上を入力してください");
-
-      const stockRef = ref(db, `stocks/${stockId}`);
-      const stockSnap = await get(stockRef);
-      const stock = stockSnap.val();
-
-      const userRef = ref(db, `users/${currentUser.uid}`);
-      const userSnap = await get(userRef);
-      const user = userSnap.val();
-
-      const currentShares = user.portfolio?.[stockId]?.shares || 0;
-      if (currentShares < quantity) return alert(`❌ 保有株が不足しています！`);
-
-      const revenue = stock.price * quantity;
-      const newCash = user.cash + revenue;
-      const newPortfolio = { ...user.portfolio };
-      newPortfolio[stockId] = { shares: currentShares - quantity };
-      if (newPortfolio[stockId].shares <= 0) delete newPortfolio[stockId];
-
-      await update(userRef, { cash: newCash, portfolio: newPortfolio });
-
-      // 売圧で価格下降
-      const impact = 1 - (quantity * 0.0008);
-      const newPrice = Math.max(100, Math.round(stock.price * impact));
-      await update(stockRef, { price: newPrice, lastUpdated: Date.now() });
-
-      alert(`✅ ${stock.name} を ${quantity}株 売却しました！\n価格が下降傾向になりました`);
-    };
-
-    // ======================
-    // Googleで自分の会社を上場（ログイン必須）
-    // ======================
-    window.listMyStock = async function() {
-      if (!currentUser || currentUser.isAnonymous) {
-        alert("Googleログインしてから上場してください！");
-        return;
-      }
-      const stockName = prompt("上場する会社の名前を入力してください", `${currentUser.displayName} Inc.`);
-      if (!stockName) return;
-
-      const newStockRef = push(ref(db, 'stocks'));
-      await set(newStockRef, {
-        id: newStockRef.key,
-        name: stockName,
-        price: 1000,
-        lastUpdated: Date.now(),
-        owner: currentUser.uid,
-        ownerName: currentUser.displayName || currentUser.email
-      });
-
-      alert(`🎉 「${stockName}」が上場しました！`);
-    };
-
-    // ======================
-    // Googleログイン
-    // ======================
-    async function loginWithGoogle() {
-      try {
-        const result = await signInWithPopup(auth, googleProvider);
-        console.log("✅ Googleログイン成功", result.user.displayName);
-      } catch (error) {
-        console.error("Googleログイン失敗", error);
-        alert("Googleログインに失敗しました");
-      }
-    }
-
-    // ======================
-    // 資産＋株一覧をリアルタイム表示
-    // ======================
-    function renderAll() {
-      const summaryEl = document.getElementById('portfolioSummary');
-      if (!currentUser || !userData) {
-        summaryEl.innerHTML = `<p style="color:#f59e0b;">読み込み中…（自動で資金10万円が付与されます）</p>`;
-        return;
-      }
-
-      let portfolioValue = 0;
-      if (userData.portfolio && stocksData) {
-        Object.keys(userData.portfolio).forEach(sid => {
-          const shares = userData.portfolio[sid].shares || 0;
-          const price = stocksData[sid]?.price || 0;
-          portfolioValue += shares * price;
-        });
-      }
-      const totalAssets = userData.cash + portfolioValue;
-
-      const displayName = currentUser.isAnonymous 
-        ? "👤 ゲスト（ログイン不要）" 
-        : `✅ ${currentUser.displayName || "Googleユーザー"}`;
-
-      summaryEl.innerHTML = `
-        <h2>💰 あなたの資産状況</h2>
-        <div style="display:flex; gap:30px; justify-content:center; font-size:1.3rem; background:#1e2937; padding:15px; border-radius:12px;">
-          <div><strong>${displayName}</strong></div>
-          <div>資金: <strong>¥${userData.cash.toLocaleString()}</strong></div>
-          <div>保有株評価額: <strong>¥${portfolioValue.toLocaleString()}</strong></div>
-          <div style="color:#22c55e;">総資産: <strong>¥${totalAssets.toLocaleString()}</strong></div>
-        </div>
-        ${currentUser.isAnonymous ? `<p style="text-align:center; margin-top:8px; color:#eab308;">※ 今すぐ売買OK！ Googleログインで上場できます</p>` : ''}
-      `;
-
-      const container = document.getElementById('stockList');
-      if (!stocksData) {
-        container.innerHTML = "<p>読み込み中...</p>";
-        return;
-      }
-
-      let html = `
-        <h2>📊 上場銘柄一覧（リアルタイム）</h2>
-        <table border="1" style="width:100%; border-collapse:collapse; text-align:center; background:#1e2937;">
-          <thead>
-            <tr style="background:#0f172a; color:#fff;">
-              <th style="padding:12px;">銘柄名</th>
-              <th style="padding:12px;">現在価格</th>
-              <th style="padding:12px;">所有者（Google）</th>
-              <th style="padding:12px;">あなたの保有数</th>
-              <th style="padding:12px; width:220px;">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-
-      Object.keys(stocksData).forEach(key => {
-        const s = stocksData[key];
-        const ownerText = s.ownerName ? s.ownerName : '---';
-        const myShares = (userData?.portfolio?.[key]?.shares) || 0;
-
-        html += `
-          <tr style="border-bottom:1px solid #334155;">
-            <td style="padding:12px; font-weight:bold;">${s.name}</td>
-            <td style="padding:12px;"><strong>¥${s.price.toLocaleString()}</strong></td>
-            <td style="padding:12px;">${ownerText}</td>
-            <td style="padding:12px; color:#22c55e; font-size:1.1rem;">${myShares}株</td>
-            <td style="padding:12px;">
-              <div style="display:flex; gap:8px; justify-content:center;">
-                <input id="qty-${key}" type="number" value="10" min="1" style="width:70px; padding:6px; text-align:center; border-radius:6px;">
-                <button onclick="buyStock('${key}', parseInt(document.getElementById('qty-${key}').value) || 1)" style="background:#22c55e; color:white; padding:8px 16px; border:none; border-radius:6px; cursor:pointer;">買う</button>
-                <button onclick="sellStock('${key}', parseInt(document.getElementById('qty-${key}').value) || 1)" style="background:#ef4444; color:white; padding:8px 16px; border:none; border-radius:6px; cursor:pointer;">売る</button>
-              </div>
-            </td>
-          </tr>
-        `;
-      });
-
-      html += `</tbody></table>`;
-      container.innerHTML = html;
-    }
-
-    // ======================
-    // メイン処理
-    // ======================
-    window.onload = () => {
-      initDefaultStocks();
-
-      // 1分ごとの株価自動変動（全員共通）
-      setInterval(fluctuatePrices, 60000);
-
-      // 株価リアルタイム監視
-      onValue(ref(db, 'stocks'), (snapshot) => {
-        stocksData = snapshot.val();
-        renderAll();
-      });
-
-      // 認証状態監視
-      onAuthStateChanged(auth, async (user) => {
-        currentUser = user;
-
-        if (user) {
-          await ensureUserData(user.uid);
-
-          const userRef = ref(db, `users/${user.uid}`);
-          onValue(userRef, (snapshot) => {
-            userData = snapshot.val();
-            renderAll();
-          });
-        } else {
-          // まだ誰もいない → 自動で匿名ログイン（資金・売買が即可能に）
-          signInAnonymously(auth).catch(console.error);
+    <meta charset="UTF-8">
+    <title>3D FPS - XM7 & AWM</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 20px; height: 20px; border: 2px solid rgba(0,255,0,0.5);
+            border-radius: 50%; transform: translate(-50%, -50%);
+            pointer-events: none;
         }
-
-        renderAll();
-      });
-
-      // Googleログインボタン
-      document.getElementById('googleLoginBtn').addEventListener('click', loginWithGoogle);
-
-      console.log("🚀 global tax game 起動完了！（資金・売買はログイン不要・Googleで上場可能）");
-    };
-  </script>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 20px; background: #0f172a; color: #e2e8f0; }
-    h1 { text-align: center; font-size: 2.8rem; margin-bottom: 8px; }
-    button { cursor: pointer; }
-    table th, table td { padding: 12px; }
-    input[type="number"] { background:#334155; color:white; border:1px solid #64748b; }
-    #portfolioSummary { margin: 20px 0; }
-  </style>
+        #ui {
+            position: absolute; bottom: 20px; left: 20px;
+            color: white; background: rgba(0,0,0,0.5); padding: 10px;
+        }
+        #instructions {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: white; background: rgba(0,0,0,0.8); padding: 20px; text-align: center;
+        }
+    </style>
 </head>
 <body>
-  <h1>🌍 global tax game</h1>
-  <p style="text-align:center; font-size:1.3rem; margin-bottom:30px;">
-    リアルタイム投資ゲーム<br>
-    1分ごとに株価変動 ＋ 買えば上がる・売れば下がる<br>
-    <strong>資金・買う・売るは完全ログイン不要！</strong><br>
-    Googleログインで自分の会社を上場できます
-  </p>
 
-  <div style="text-align:center; margin:20px 0;">
-    <button id="googleLoginBtn" style="padding:14px 32px; font-size:18px; background:#4285f4; color:white; border:none; border-radius:9999px;">
-      Googleでログインして自分の会社を上場する
-    </button>
-  </div>
+<div id="crosshair"></div>
+<div id="ui">
+    Weapon: <span id="weapon-name">XM7</span><br>
+    Ammo: <span id="ammo">30 / ∞</span>
+</div>
+<div id="instructions">
+    <h1>CLICK TO PLAY</h1>
+    WASD: 移動 | 1, 2: 武器切替 | ENTER: ADS(スコープ) | SPACE: 射撃
+</div>
 
-  <div id="portfolioSummary" style="text-align:center; min-height:80px;"></div>
+<script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
 
-  <div id="stockList" style="margin-top:20px;"></div>
+<script type="module">
+import * as THREE from 'three';
+import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
 
-  <p style="text-align:center; margin-top:60px; font-size:0.95rem; color:#64748b;">
-    ※ Firebaseコンソールで「Anonymous」と「Google」認証を有効にしてください<br>
-    ページを開いた瞬間に自動で資金10万円が付与され、すぐに売買できます
-  </p>
+// --- 設定 ---
+const STAGE_SIZE = 100;
+const WEAPONS = {
+    xm7: { name: 'XM7', zoom: 1.25, recoil: 0.05, speed: 100, ammo: 30, color: 0x555555, size: [0.1, 0.1, 0.5] },
+    awm: { name: 'AWM', zoom: 4.0, recoil: 0.2, speed: 800, ammo: 5, color: 0x224422, size: [0.1, 0.1, 0.8] }
+};
+
+let currentWeapon = WEAPONS.xm7;
+let isAds = false;
+let isReloading = false;
+
+// --- シーン構築 ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb); // 青空
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+scene.add(light);
+
+// 地面
+const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(STAGE_SIZE, STAGE_SIZE),
+    new THREE.MeshStandardMaterial({ color: 0x448844 })
+);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+
+// --- プレイヤー & 武器 ---
+const controls = new PointerLockControls(camera, document.body);
+const instructions = document.getElementById('instructions');
+
+instructions.addEventListener('click', () => controls.lock());
+controls.addEventListener('lock', () => instructions.style.display = 'none');
+controls.addEventListener('unlock', () => instructions.style.display = 'block');
+
+const weaponGroup = new THREE.Group();
+camera.add(weaponGroup);
+scene.add(camera);
+
+let weaponMesh;
+function createWeaponMesh(config) {
+    if (weaponMesh) weaponGroup.remove(weaponMesh);
+    const geo = new THREE.BoxGeometry(...config.size);
+    const mat = new THREE.MeshStandardMaterial({ color: config.color });
+    weaponMesh = new THREE.Mesh(geo, mat);
+    weaponMesh.position.set(0.3, -0.2, -0.5);
+    weaponGroup.add(weaponMesh);
+}
+createWeaponMesh(currentWeapon);
+
+// --- 敵 (BOT) ---
+const enemies = [];
+function spawnBot() {
+    const geo = new THREE.BoxGeometry(1, 2, 1);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    const bot = new THREE.Mesh(geo, mat);
+    bot.position.set(Math.random() * 40 - 20, 1, Math.random() * 40 - 20);
+    bot.userData = { health: 100 };
+    scene.add(bot);
+    enemies.push(bot);
+}
+for(let i=0; i<5; i++) spawnBot();
+
+// --- 入力制御 ---
+const keys = {};
+document.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+    if (e.key === '1') switchWeapon(WEAPONS.xm7);
+    if (e.key === '2') switchWeapon(WEAPONS.awm);
+    if (e.code === 'Enter') toggleAds();
+    if (e.code === 'Space') fire();
+});
+document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+function switchWeapon(w) {
+    currentWeapon = w;
+    createWeaponMesh(w);
+    isAds = false;
+    camera.fov = 75;
+    camera.updateProjectionMatrix();
+    document.getElementById('weapon-name').innerText = w.name;
+}
+
+function toggleAds() {
+    isAds = !isAds;
+    camera.fov = isAds ? 75 / currentWeapon.zoom : 75;
+    camera.updateProjectionMatrix();
+    weaponMesh.position.x = isAds ? 0 : 0.3; // センターに寄せる
+}
+
+function fire() {
+    if (isReloading) return;
+    
+    // 反動 (Recoil)
+    camera.rotation.x += currentWeapon.recoil;
+    
+    // 弾道計算 (Raycaster)
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+    const hits = raycaster.intersectObjects(enemies);
+    
+    if (hits.length > 0) {
+        const target = hits[0].object;
+        scene.remove(target); // 敵を倒す
+        enemies.splice(enemies.indexOf(target), 1);
+        setTimeout(spawnBot, 2000); // 2秒後にリスポーン
+    }
+
+    // 発射演出（簡易リロード）
+    isReloading = true;
+    setTimeout(() => isReloading = false, currentWeapon.speed);
+}
+
+// --- メインループ ---
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    if (controls.isLocked) {
+        // 移動処理
+        const delta = 0.15;
+        velocity.x -= velocity.x * 10.0 * delta;
+        velocity.z -= velocity.z * 10.0 * delta;
+
+        direction.z = Number(keys['KeyW']) - Number(keys['KeyS']);
+        direction.x = Number(keys['KeyD']) - Number(keys['KeyA']);
+        direction.normalize();
+
+        if (keys['KeyW'] || keys['KeyS']) velocity.z -= direction.z * 400.0 * delta;
+        if (keys['KeyA'] || keys['KeyD']) velocity.x -= direction.x * 400.0 * delta;
+
+        controls.moveRight(-velocity.x * delta);
+        controls.moveForward(-velocity.z * delta);
+
+        // BOTの簡易AI (プレイヤーを追う)
+        enemies.forEach(bot => {
+            const dir = new THREE.Vector3().subVectors(camera.position, bot.position).normalize();
+            bot.position.x += dir.x * 0.05;
+            bot.position.z += dir.z * 0.05;
+            bot.lookAt(camera.position.x, 1, camera.position.z);
+        });
+    }
+
+    renderer.render(scene, camera);
+}
+animate();
+
+// 画面リサイズ対応
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
 </body>
 </html>
