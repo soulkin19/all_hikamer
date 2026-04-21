@@ -3,38 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Tactical PvE - Continuous Survival</title>
+    <title>Tactical PvE - Advanced Edition</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; touch-action: none; background: #000; }
         #ui { position: absolute; top: 15px; left: 15px; color: #111; pointer-events: none; background: rgba(255,255,255,0.8); padding: 12px; border-radius: 8px; font-weight: bold; border: 2px solid #444; z-index: 5; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); pointer-events: none; z-index: 5; }
+        
+        /* クロスヘアとヒットインジケーター */
+        #crosshair-container { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 5; }
+        #crosshair { width: 20px; height: 20px; position: relative; }
         #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ff00; }
         #crosshair::before { width: 100%; height: 2px; top: 9px; } #crosshair::after { width: 2px; height: 100%; left: 9px; }
         
+        #hit-marker { position: absolute; top: 0; left: 0; width: 20px; height: 20px; display: none; }
+        #hit-marker::before, #hit-marker::after { content: ''; position: absolute; background: #ff4444; width: 100%; height: 2px; top: 9px; }
+        #hit-marker::before { transform: rotate(45deg); } #hit-marker::after { transform: rotate(-45deg); }
+
         #scope-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle at center, transparent 30%, black 35%, black 100%);
             display: none; pointer-events: none; z-index: 10;
         }
-        #scope-overlay::before, #scope-overlay::after { content: ''; position: absolute; background: rgba(0, 255, 0, 0.5); }
-        #scope-overlay::before { width: 100%; height: 1px; top: 50%; }
-        #scope-overlay::after { width: 1px; height: 100%; left: 50%; }
 
-        #ammo-display { position: absolute; bottom: 30px; left: 20px; color: white; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px; border: 1px solid #777; min-width: 140px; z-index: 5; }
+        #ammo-display { position: absolute; bottom: 30px; left: 20px; color: white; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px; border: 1px solid #777; min-width: 160px; z-index: 5; }
         #reload-msg { position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); color: #ffeb3b; font-size: 24px; font-weight: bold; display: none; text-shadow: 2px 2px #000; z-index: 5; }
         #click-to-start { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; cursor: pointer; z-index: 100; text-align: center; }
+        #log { font-size: 12px; color: #00ff00; margin-top: 5px; }
     </style>
 </head>
 <body>
-    <div id="click-to-start">CLICK TO DEPLOY<br><span style="font-size:14px;">[WASD]: Move | [Swipe]: Look | [Space]: Fire | [Enter]: ADS | [1-4]: Switch</span></div>
+    <div id="click-to-start">CLICK TO DEPLOY<br><span style="font-size:14px;">[WASD]: Move | [Space]: Fire | [Enter]: ADS | [1-4]: Weapon Swap<br>Score 500 for Auto-Upgrade!</span></div>
     <div id="scope-overlay"></div>
-    <div id="ui">SCORE: <span id="score">0</span> | HP: <span id="health">100</span></div>
+    <div id="ui">
+        SCORE: <span id="score">0</span> | HP: <span id="health">100</span>
+        <div id="log">SYSTEM READY...</div>
+    </div>
     <div id="reload-msg">RELOADING...</div>
-    <div id="crosshair"></div>
+    
+    <div id="crosshair-container">
+        <div id="crosshair"></div>
+        <div id="hit-marker"></div>
+    </div>
 
     <div id="ammo-display">
         <div id="weapon-name" style="color: #ffeb3b; font-size: 1.2em;">XM7</div>
-        <div style="font-size: 32px;"><span id="current-ammo">45</span> / <span id="max-ammo">45</span></div>
+        <div style="font-size: 24px;"><span id="current-ammo">45</span> / <span id="max-ammo">45</span></div>
+        <div id="weapon-lv" style="font-size: 14px; color: #aaa;">Lv.1 Standard</div>
     </div>
 
     <script type="importmap">
@@ -45,24 +58,25 @@
         import * as THREE from 'three';
 
         // --- 設定 ---
-        const STAGE_SIZE = 100;
-        const SPAWN_INTERVAL = 2000; // 敵が出る間隔 (ミリ秒)
-        const MAX_ENEMIES = 15;      // 同時に存在できる敵の最大数
+        const STAGE_SIZE = 120;
+        let spawnInterval = 1800; 
+        const MAX_ENEMIES = 20;
 
         const WEAPONS = {
-            S12K: { name: 'S12K', maxAmmo: 4, ammo: 4, rpm: 200, reloadTime: 1800, recoil: 0.14, damage: 30, spread: 0.14, pellets: 10, color: 0x1a1a1a, adsFov: 50 },
-            XM7: { name: 'XM7', maxAmmo: 45, ammo: 45, rpm: 800, reloadTime: 2200, recoil: 0.04, damage: 35, spread: 0.02, pellets: 1, color: 0x7a6a4f, adsFov: 40 },
-            AWM: { name: 'AWM', maxAmmo: 5, ammo: 5, rpm: 45, reloadTime: 3500, recoil: 0.6, damage: 200, spread: 0.001, pellets: 1, color: 0x4a5d4a, adsFov: 15 },
-            UZI: { name: 'UZI', maxAmmo: 32, ammo: 32, rpm: 1200, reloadTime: 1500, recoil: 0.03, damage: 15, spread: 0.08, pellets: 1, color: 0x333333, adsFov: 60 }
+            S12K: { name: 'S12K', lv: 1, maxAmmo: 5, ammo: 5, rpm: 180, reloadTime: 1800, recoil: 0.15, damage: 25, spread: 0.15, pellets: 10, color: 0x1a1a1a, adsFov: 50 },
+            XM7: { name: 'XM7', lv: 1, maxAmmo: 40, ammo: 40, rpm: 750, reloadTime: 2000, recoil: 0.05, damage: 30, spread: 0.03, pellets: 1, color: 0x7a6a4f, adsFov: 40 },
+            AWM: { name: 'AWM', lv: 1, maxAmmo: 5, ammo: 5, rpm: 40, reloadTime: 3000, recoil: 0.7, damage: 250, spread: 0.001, pellets: 1, color: 0x4a5d4a, adsFov: 12 },
+            UZI: { name: 'UZI', lv: 1, maxAmmo: 32, ammo: 32, rpm: 1100, reloadTime: 1400, recoil: 0.03, damage: 14, spread: 0.09, pellets: 1, color: 0x333333, adsFov: 60 }
         };
 
         let currentWeapon = WEAPONS.XM7;
         let isReloading = false, isAds = false;
         let score = 0, playerHealth = 100, lastFireTime = 0, targetRecoilX = 0, lastSpawnTime = 0;
+        let nextUpgradeScore = 500;
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87ceeb);
-        scene.fog = new THREE.Fog(0x87ceeb, 20, 150);
+        scene.background = new THREE.Color(0x111122);
+        scene.fog = new THREE.Fog(0x111122, 10, 100);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
         camera.rotation.order = 'YXZ';
@@ -70,49 +84,46 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-        sun.position.set(30, 60, 30);
-        scene.add(sun);
+        scene.add(new THREE.AmbientLight(0x444444, 0.5));
+        const moonLight = new THREE.DirectionalLight(0xaaaaff, 0.8);
+        moonLight.position.set(50, 100, 50);
+        scene.add(moonLight);
 
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(STAGE_SIZE, STAGE_SIZE), new THREE.MeshStandardMaterial({ color: 0x6a8a6a }));
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(STAGE_SIZE, STAGE_SIZE), new THREE.MeshStandardMaterial({ color: 0x222222 }));
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
-        // 外壁
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
-        const createWall = (w, h, d, x, z) => {
-            const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
-            wall.position.set(x, h/2, z);
-            scene.add(wall);
-        };
-        createWall(STAGE_SIZE, 8, 2, 0, STAGE_SIZE/2); createWall(STAGE_SIZE, 8, 2, 0, -STAGE_SIZE/2);
-        createWall(2, 8, STAGE_SIZE, STAGE_SIZE/2, 0); createWall(2, 8, STAGE_SIZE, -STAGE_SIZE/2, 0);
-
-        // 武器モデル
+        // 武器モデル & マズルフラッシュ用ライト
         const weaponGroup = new THREE.Group();
         const weaponPivot = new THREE.Group();
         const gunContainer = new THREE.Group();
+        const muzzleFlashLight = new THREE.PointLight(0xffaa00, 0, 10);
+        gunContainer.add(muzzleFlashLight);
+        
+        // マズルフラッシュの視覚効果（小さな球体）
+        const muzzleFlashMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(0.1),
+            new THREE.MeshBasicMaterial({ color: 0xffcc00 })
+        );
+        muzzleFlashMesh.visible = false;
+        gunContainer.add(muzzleFlashMesh);
 
         function buildGunModel(config) {
             gunContainer.clear();
-            const mat = new THREE.MeshStandardMaterial({ color: config.color, metalness: 0.6, roughness: 0.4 });
+            gunContainer.add(muzzleFlashLight);
+            gunContainer.add(muzzleFlashMesh);
+            const mat = new THREE.MeshStandardMaterial({ color: config.color, metalness: 0.8, roughness: 0.2 });
             let bW = 0.1, bH = 0.15, bL = 0.6;
             if(config.name === 'UZI') { bW = 0.08; bH = 0.12; bL = 0.35; }
             const body = new THREE.Mesh(new THREE.BoxGeometry(bW, bH, bL), mat);
             gunContainer.add(body);
-            const barrelLen = config.name === 'AWM' ? 0.8 : (config.name === 'UZI' ? 0.15 : 0.4);
+            const barrelLen = config.name === 'AWM' ? 0.9 : (config.name === 'UZI' ? 0.15 : 0.4);
             const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, barrelLen), mat);
             barrel.rotation.x = Math.PI / 2; barrel.position.z = - (bL/2 + barrelLen/2);
             gunContainer.add(barrel);
-            const mag = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.2, 0.12), mat);
-            mag.position.set(0, -0.15, -0.05);
-            gunContainer.add(mag);
-            if (config.name === 'AWM') {
-                const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3), mat);
-                scope.rotation.x = Math.PI / 2; scope.position.y = 0.12;
-                gunContainer.add(scope);
-            }
+            muzzleFlashLight.position.z = barrel.position.z - barrelLen/2;
+            muzzleFlashMesh.position.z = muzzleFlashLight.position.z;
+            
             gunContainer.position.set(0.3, -0.25, -0.6);
             return gunContainer;
         }
@@ -122,21 +133,53 @@
         scene.add(weaponGroup);
 
         const tracers = [], enemies = [];
+
         function spawnEnemy() {
-            if (enemies.length >= MAX_ENEMIES) return; // 敵が多すぎるときはスキップ
-            const e = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1, 4, 8), new THREE.MeshStandardMaterial({ color: 0xcc3333 }));
-            const margin = 10;
-            // プレイヤーから離れた場所にスポーンさせる
+            if (enemies.length >= MAX_ENEMIES) return;
+            const isElite = Math.random() < 0.15; // 15%でエリート
+            const size = isElite ? 1.2 : 0.8;
+            const e = new THREE.Mesh(
+                new THREE.CapsuleGeometry(0.5 * size, 1 * size, 4, 8), 
+                new THREE.MeshStandardMaterial({ color: isElite ? 0x3366ff : 0xcc3333, emissive: isElite ? 0x112255 : 0x000000 })
+            );
+            
             let ex, ez;
             do {
-                ex = (Math.random() - 0.5) * (STAGE_SIZE - margin * 2);
-                ez = (Math.random() - 0.5) * (STAGE_SIZE - margin * 2);
-            } while (new THREE.Vector2(ex, ez).distanceTo(new THREE.Vector2(camera.position.x, camera.position.z)) < 15);
+                ex = (Math.random() - 0.5) * (STAGE_SIZE - 20);
+                ez = (Math.random() - 0.5) * (STAGE_SIZE - 20);
+            } while (new THREE.Vector2(ex, ez).distanceTo(new THREE.Vector2(camera.position.x, camera.position.z)) < 20);
             
-            e.position.set(ex, 1, ez);
-            e.userData = { hp: 100, lastAtk: 0 };
+            e.position.set(ex, 1 * size, ez);
+            e.userData = { hp: isElite ? 400 : 100, lastAtk: 0, isElite: isElite };
             scene.add(e);
             enemies.push(e);
+        }
+
+        function showHitMarker() {
+            const marker = document.getElementById('hit-marker');
+            marker.style.display = 'block';
+            setTimeout(() => marker.style.display = 'none', 100);
+        }
+
+        function triggerMuzzleFlash() {
+            muzzleFlashLight.intensity = 15;
+            muzzleFlashMesh.visible = true;
+            setTimeout(() => {
+                muzzleFlashLight.intensity = 0;
+                muzzleFlashMesh.visible = false;
+            }, 40);
+        }
+
+        function checkUpgrade() {
+            if (score >= nextUpgradeScore) {
+                currentWeapon.lv++;
+                currentWeapon.damage += 5;
+                currentWeapon.maxAmmo += 2;
+                currentWeapon.recoil *= 0.9;
+                nextUpgradeScore += 750;
+                document.getElementById('log').innerText = `UPGRADED: ${currentWeapon.name} Lv.${currentWeapon.lv}!`;
+                updateUI();
+            }
         }
 
         function fire() {
@@ -145,28 +188,41 @@
             if (now - lastFireTime < (60000 / currentWeapon.rpm)) return;
             
             currentWeapon.ammo--; 
-            lastFireTime = now; 
+            lastFireTime = now;
+            triggerMuzzleFlash();
             updateUI();
             
             targetRecoilX += currentWeapon.recoil;
-            weaponPivot.position.z += 0.2; weaponPivot.rotation.x -= 0.15;
+            weaponPivot.position.z += 0.15; weaponPivot.rotation.x -= 0.1;
+
             const ray = new THREE.Raycaster();
+            let hitAnything = false;
+
             for (let i = 0; i < currentWeapon.pellets; i++) {
                 ray.setFromCamera(new THREE.Vector2(0,0), camera);
                 ray.ray.direction.x += (Math.random()-0.5) * currentWeapon.spread;
                 ray.ray.direction.y += (Math.random()-0.5) * currentWeapon.spread;
-                const muz = new THREE.Vector3().setFromMatrixPosition(gunContainer.matrixWorld);
+
+                const muz = new THREE.Vector3().setFromMatrixPosition(muzzleFlashMesh.matrixWorld);
                 const tar = ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(100));
-                const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 2.5), new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 2), new THREE.MeshBasicMaterial({ color: 0xffcc00 }));
                 mesh.position.copy(muz); mesh.lookAt(tar); scene.add(mesh);
-                tracers.push({ mesh, life: 8 });
+                tracers.push({ mesh, life: 5 });
+
                 const hits = ray.intersectObjects(enemies);
                 if(hits.length > 0) {
+                    hitAnything = true;
                     const e = hits[0].object;
                     e.userData.hp -= currentWeapon.damage;
-                    if(e.userData.hp <= 0) { scene.remove(e); enemies.splice(enemies.indexOf(e), 1); score += 100; }
+                    if(e.userData.hp <= 0) {
+                        score += e.userData.isElite ? 300 : 100;
+                        scene.remove(e);
+                        enemies.splice(enemies.indexOf(e), 1);
+                        checkUpgrade();
+                    }
                 }
             }
+            if(hitAnything) showHitMarker();
             if(currentWeapon.ammo === 0) reload();
         }
 
@@ -183,14 +239,10 @@
         }
 
         function switchWeapon(key) {
-            // 現在リロード中の場合はキャンセル、または武器切り替えを制限する場合はここで制御
-            // 今回はシンプルに、切り替え時にリロード中フラグをリセットします
             isReloading = false;
             document.getElementById('reload-msg').style.display = 'none';
-
             currentWeapon = WEAPONS[key]; 
             buildGunModel(currentWeapon);
-            // 弾数は currentWeapon.ammo をそのまま使う（リセットしない）
             isAds = false;
             updateScope(); 
             updateUI();
@@ -200,14 +252,11 @@
             camera.fov = isAds ? currentWeapon.adsFov : 75;
             camera.updateProjectionMatrix();
             const scopeOverlay = document.getElementById('scope-overlay');
-            const crosshair = document.getElementById('crosshair');
             if (isAds && currentWeapon.name === 'AWM') {
                 scopeOverlay.style.display = 'block';
-                crosshair.style.display = 'none';
                 gunContainer.visible = false;
             } else {
                 scopeOverlay.style.display = 'none';
-                crosshair.style.display = 'block';
                 gunContainer.visible = true;
                 gunContainer.position.x = isAds ? 0 : 0.3;
                 gunContainer.position.y = isAds ? -0.12 : -0.25;
@@ -218,6 +267,7 @@
             document.getElementById('current-ammo').innerText = currentWeapon.ammo;
             document.getElementById('max-ammo').innerText = currentWeapon.maxAmmo;
             document.getElementById('weapon-name').innerText = currentWeapon.name;
+            document.getElementById('weapon-lv').innerText = `Lv.${currentWeapon.lv} Tactical`;
             document.getElementById('score').innerText = score;
             document.getElementById('health').innerText = Math.max(0, playerHealth);
         }
@@ -274,28 +324,29 @@
             requestAnimationFrame(animate);
             const now = Date.now();
 
-            // 敵の自動スポーン
-            if (now - lastSpawnTime > SPAWN_INTERVAL) {
+            // 難易度調整: スコアに応じてスポーン間隔短縮
+            const currentSpawnInterval = Math.max(600, spawnInterval - (score / 50));
+            if (now - lastSpawnTime > currentSpawnInterval) {
                 spawnEnemy();
                 lastSpawnTime = now;
             }
 
-            if (now - lastFireTime > 120) targetRecoilX *= 0.8;
+            if (now - lastFireTime > 100) targetRecoilX *= 0.7;
             camera.rotation.x += targetRecoilX * 0.1;
-            targetRecoilX *= 0.92;
+            targetRecoilX *= 0.9;
 
             weaponPivot.position.lerp(new THREE.Vector3(0,0,0), 0.2);
-            weaponPivot.rotation.x *= 0.85;
+            weaponPivot.rotation.x *= 0.8;
             weaponGroup.position.copy(camera.position);
             weaponGroup.quaternion.copy(camera.quaternion);
 
             for(let i=tracers.length-1; i>=0; i--) {
-                tracers[i].mesh.translateZ(4.5); tracers[i].life--;
+                tracers[i].mesh.translateZ(5); tracers[i].life--;
                 if(tracers[i].life <= 0) { scene.remove(tracers[i].mesh); tracers.splice(i,1); }
             }
 
-            const s = 0.15;
-            const nextPos = camera.position.clone();
+            // 移動
+            const s = 0.16;
             const moveDir = new THREE.Vector3();
             if(keys['KeyW']) moveDir.z -= 1;
             if(keys['KeyS']) moveDir.z += 1;
@@ -303,26 +354,25 @@
             if(keys['KeyD']) moveDir.x += 1;
             moveDir.applyQuaternion(camera.quaternion);
             moveDir.y = 0;
-            nextPos.add(moveDir.normalize().multiplyScalar(s));
-
-            const limit = STAGE_SIZE / 2 - 2;
-            if(Math.abs(nextPos.x) < limit && Math.abs(nextPos.z) < limit) {
-                camera.position.x = nextPos.x;
-                camera.position.z = nextPos.z;
-            }
+            camera.position.add(moveDir.normalize().multiplyScalar(s));
+            
+            // 範囲制限
+            camera.position.x = Math.max(-STAGE_SIZE/2+3, Math.min(STAGE_SIZE/2-3, camera.position.x));
+            camera.position.z = Math.max(-STAGE_SIZE/2+3, Math.min(STAGE_SIZE/2-3, camera.position.z));
             camera.position.y = 1.6;
 
             enemies.forEach(e => {
                 const v = new THREE.Vector3().subVectors(camera.position, e.position);
                 v.y = 0;
-                // 敵の移動速度を少しずつ上げる（スコアに応じて難易度上昇）
-                const speed = 0.06 + Math.min(score * 0.000001, 0.05);
-                if(v.length() > 1.8) e.translateOnAxis(v.normalize(), speed);
-                else if(playerHealth > 0 && now - e.userData.lastAtk > 1000) {
-                    playerHealth -= 10; e.userData.lastAtk = now; updateUI();
-                    if(playerHealth <= 0) { alert("GAME OVER. SCORE: " + score); location.reload(); }
+                // スコアに応じて敵が加速
+                const speed = (e.userData.isElite ? 0.08 : 0.07) + (score * 0.00001);
+                if(v.length() > 1.5) e.translateOnAxis(v.normalize(), speed);
+                else if(playerHealth > 0 && now - e.userData.lastAtk > 800) {
+                    playerHealth -= e.userData.isElite ? 25 : 10; 
+                    e.userData.lastAtk = now; updateUI();
+                    if(playerHealth <= 0) { alert("MISSION FAILED. SCORE: " + score); location.reload(); }
                 }
-                e.lookAt(camera.position.x, 1, camera.position.z);
+                e.lookAt(camera.position.x, e.position.y, camera.position.z);
             });
 
             renderer.render(scene, camera);
